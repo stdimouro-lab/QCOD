@@ -19,16 +19,19 @@ export default function App() {
   const [tab, setTab] = useState('overview');
   const statusCounts = getStatusCounts();
   const outstanding = getOutstandingSections();
+  const returnNeeded = outstanding.filter((s) => s.status === 'return_needed');
+  const noAccess = outstanding.filter((s) => s.status === 'no_access');
   const building = buildings[0];
 
   return (
     <div className="app">
       <header className="header">
         <div className="header-brand">
-          <p className="header-eyebrow">Martinsburg VA Medical Center</p>
+          <p className="header-eyebrow">{project.acronym || 'QCOD'}</p>
           <h1>Quality Control Operations Dashboard</h1>
+          <p className="header-sub">{project.facility}</p>
           <p className="header-sub">
-            Building {project.focusBuilding} — {building?.name} — {project.phase}
+            Building {project.focusBuilding} — {project.phase}
           </p>
         </div>
         <div className="status-legend">
@@ -39,6 +42,10 @@ export default function App() {
           ))}
         </div>
       </header>
+
+      <div className="poc-banner">
+        Proof of Concept — Only verified project information is shown. Unknown values remain pending.
+      </div>
 
       <nav className="tabs">
         {TABS.map((t) => (
@@ -64,12 +71,23 @@ export default function App() {
           <FloorProgress floors={floors} />
         )}
 
-        {(tab === 'overview' || tab === 'sections') && tab !== 'outstanding' && (
-          <SectionTable sections={sections} />
+        {tab === 'sections' && (
+          <SectionTable sections={sections} title="Sections" />
         )}
 
         {tab === 'outstanding' && (
-          <SectionTable sections={outstanding} title="Outstanding Work" />
+          <>
+            <SectionTable
+              sections={returnNeeded}
+              title="Return Needed"
+              emptyMessage="No sections currently marked Return Needed."
+            />
+            <SectionTable
+              sections={noAccess}
+              title="No Access"
+              emptyMessage="No sections currently marked No Access."
+            />
+          </>
         )}
       </main>
 

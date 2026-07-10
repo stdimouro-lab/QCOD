@@ -80,6 +80,18 @@ body {
   opacity: 0.9;
 }
 
+/* Proof of Concept banner */
+.poc-banner {
+  background: #fffbeb;
+  color: #92400e;
+  border: 1px solid #f5d590;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  margin-bottom: 1.25rem;
+}
+
 /* Tabs */
 .tabs {
   display: flex;
@@ -195,6 +207,20 @@ body {
   transition: width 0.4s ease;
 }
 
+.progress-fill.pending {
+  background: var(--slate-200);
+}
+
+.dual-progress {
+  display: grid;
+  gap: 0.85rem;
+  margin-bottom: 0.5rem;
+}
+
+.verified-note {
+  font-style: italic;
+}
+
 /* Panels */
 .panel {
   background: #fff;
@@ -209,6 +235,11 @@ body {
   font-weight: 600;
   color: var(--navy);
   margin-bottom: 1rem;
+}
+
+.empty-note {
+  font-size: 0.85rem;
+  color: var(--slate-400);
 }
 
 /* Floor grid */

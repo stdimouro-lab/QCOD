@@ -2,10 +2,10 @@
   {
     "id": "500",
     "name": "Building 500",
-    "description": "Main clinical and administrative building",
-    "expectedAssets": 4820,
-    "foundAssets": 3912,
-    "taggedAssets": 3648,
+    "description": "Main Hospital Building",
+    "expectedAssets": 0,
+    "foundAssets": 0,
+    "taggedAssets": 0,
     "status": "in_progress"
   }
 ]

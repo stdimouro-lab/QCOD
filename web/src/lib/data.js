@@ -6,8 +6,17 @@ import statuses from '../../../data/statuses.json';
 
 export { project, buildings, floors, sections, statuses };
 
+// Returns null (meaning "Pending") when the denominator is unknown or zero.
+// Never silently reports 0% for a total we don't actually have yet.
 export function pct(num, den) {
-  return den > 0 ? Math.round((num / den) * 100) : 0;
+  if (!den || den <= 0) return null;
+  return Math.round((num / den) * 100);
+}
+
+export function getSectionProgressPct() {
+  if (sections.length === 0) return 0;
+  const avg = sections.reduce((s, sec) => s + (sec.completionPct || 0), 0) / sections.length;
+  return Math.round(avg);
 }
 
 export function getProjectTotals() {
@@ -37,4 +46,14 @@ export function getOutstandingSections() {
 
 export function getFloorName(floorId) {
   return floors.find((f) => f.id === floorId)?.name ?? floorId;
+}
+
+// Display helpers — a null/undefined value always renders as "Pending",
+// never as 0%, NaN, or 0 of 0.
+export function fmtPct(value) {
+  return value === null || value === undefined || Number.isNaN(value) ? 'Pending' : `${value}%`;
+}
+
+export function fmtNum(value) {
+  return value === null || value === undefined || value === 0 ? 'Pending' : value.toLocaleString();
 }

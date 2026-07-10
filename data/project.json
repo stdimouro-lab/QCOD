@@ -1,7 +1,9 @@
 {
-  "name": "Martinsburg VA Medical Center RFID Inventory",
+  "name": "Quality Control Operations Dashboard",
+  "acronym": "QCOD",
   "facility": "Martinsburg VA Medical Center",
   "phase": "Proof of Concept",
   "focusBuilding": "500",
+  "scope": "Section progress, RFID scanning, asset tagging, return-needed areas, and no-access areas",
   "lastUpdated": "2026-07-09"
 }

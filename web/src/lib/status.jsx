@@ -15,12 +15,21 @@ export function StatusBadge({ status }) {
 }
 
 export function ProgressBar({ value, label }) {
-  const clamped = Math.min(100, Math.max(0, value));
+  const isPending = value === null || value === undefined;
+  const clamped = isPending ? 0 : Math.min(100, Math.max(0, value));
   return (
     <div className="progress-bar-wrap">
-      {label && <div className="progress-label"><span>{label}</span><span>{clamped}%</span></div>}
+      {label && (
+        <div className="progress-label">
+          <span>{label}</span>
+          <span>{isPending ? 'Pending' : `${clamped}%`}</span>
+        </div>
+      )}
       <div className="progress-track">
-        <div className="progress-fill" style={{ width: `${clamped}%` }} />
+        <div
+          className={`progress-fill${isPending ? ' pending' : ''}`}
+          style={{ width: isPending ? '0%' : `${clamped}%` }}
+        />
       </div>
     </div>
   );
