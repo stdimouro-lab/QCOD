@@ -64,6 +64,18 @@ function normKey(s) {
   return (s ?? '').toString().trim().toLowerCase();
 }
 
+// Loosens comparison further for section/floor names: strips apostrophes
+// (curly or straight), collapses dashes/slashes and extra whitespace, so
+// "Women's Clinic" matches "Womens Clinic" and "GI Suite" matches "GI  Suite".
+// This never changes stored data — it's comparison-only.
+function looseKey(s) {
+  return normKey(s)
+    .replace(/['’]/g, '')
+    .replace(/[-\/]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function writeImportStatus(patch) {
   let current = {
     lastAssetImport: '',
@@ -138,7 +150,7 @@ async function readRows(filePath) {
 function findSection(sectionsData, floorsData, buildingRaw, floorRaw, sectionRaw) {
   const building = normKey(buildingRaw);
   const floorNorm = normKey(floorRaw);
-  const sectionNorm = normKey(sectionRaw);
+  const sectionNorm = looseKey(sectionRaw);
 
   // A row can name its floor by number ("1"), by name ("1st Floor"), or by id ("500-1").
   const floor = floorsData.find((f) => {
@@ -154,7 +166,7 @@ function findSection(sectionsData, floorsData, buildingRaw, floorRaw, sectionRaw
   return sectionsData.find((s) => {
     if (normKey(s.buildingId) !== building) return false;
     if (floor && s.floorId !== floor.id) return false;
-    return normKey(s.name) === sectionNorm;
+    return looseKey(s.name) === sectionNorm;
   });
 }
 
@@ -164,6 +176,11 @@ async function main() {
   if (!filePath) {
     console.error('Usage: npm run import:sections -- "C:\\path\\to\\section-progress.xlsx"');
     console.error('  Accepts .csv or .xlsx. Updates existing sections in data/sections.json — never creates new ones.');
+    process.exit(1);
+  }
+
+  if (!existsSync(filePath)) {
+    console.error(`File not found: ${filePath}`);
     process.exit(1);
   }
 

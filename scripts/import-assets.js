@@ -6,7 +6,9 @@
  *
  * This script only writes data/assets.json (and updates data/import-status.json).
  * It never touches floors, sections, or building data. Unknown/blank values are
- * preserved as blank rather than guessed.
+ * preserved as blank rather than guessed. No building/floor/section mapping is
+ * ever inferred from Location Name — buildingId/floorId/sectionId stay blank
+ * until mapped by hand or a future dedicated step.
  */
 import ExcelJS from 'exceljs';
 import { writeFileSync, readFileSync, existsSync } from 'fs';
@@ -80,6 +82,12 @@ async function main() {
     process.exit(1);
   }
 
+  if (!existsSync(filePath)) {
+    console.error(`File not found: ${filePath}`);
+    console.error('Copy your AssetWorx export to that path (or pass the correct path) and try again.');
+    process.exit(1);
+  }
+
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(filePath);
   const sheet = workbook.worksheets[0];
@@ -102,6 +110,7 @@ async function main() {
   let blankRows = 0;
   let validCount = 0;
   let scanErrorCount = 0;
+  let unrecognizedCount = 0;
   let missingSerialCount = 0;
   let notFoundCount = 0;
   let newAssetCount = 0;
@@ -114,6 +123,17 @@ async function main() {
     if (val instanceof Date) return val.toISOString().slice(0, 10);
     if (typeof val === 'object' && val.text) return val.text.toString().trim();
     return val.toString().trim();
+  };
+
+  // "Not Found in DB" / "New Asset Found" / "Offline Sync" can show up in
+  // either the Description or the Disposal Status column depending on how
+  // the export was generated — check both rather than assuming one.
+  const flagsFromText = (...texts) => {
+    const combined = texts.join(' ').toLowerCase();
+    return {
+      notFound: combined.includes('not found'),
+      newOrOffline: combined.includes('new asset') || combined.includes('offline sync'),
+    };
   };
 
   for (let rowNumber = 2; rowNumber <= sheet.rowCount; rowNumber += 1) {
@@ -133,21 +153,23 @@ async function main() {
       continue; // excluded entirely — not imported, not a Research item
     }
     if (kind === 'valid') validCount += 1;
+    if (kind === 'unrecognized') unrecognizedCount += 1;
 
     const serialNumber = getCell(row, 'serialNumber');
+    const description = getCell(row, 'description');
     const disposalStatus = getCell(row, 'disposalStatus');
-    const disposalLower = disposalStatus.toLowerCase();
+    const { notFound, newOrOffline } = flagsFromText(description, disposalStatus);
 
     const issueTypes = [];
     if (!serialNumber) {
       issueTypes.push('missing_serial_number');
       missingSerialCount += 1;
     }
-    if (disposalLower.includes('not found')) {
+    if (notFound) {
       issueTypes.push('not_found_in_db');
       notFoundCount += 1;
     }
-    if (disposalLower.includes('new asset') || disposalLower.includes('offline sync')) {
+    if (newOrOffline) {
       issueTypes.push('new_asset_offline_sync');
       newAssetCount += 1;
     }
@@ -155,7 +177,7 @@ async function main() {
     assets.push({
       assetNumber,
       serialNumber,
-      description: getCell(row, 'description'),
+      description,
       locationName: getCell(row, 'locationName'),
       cmr: getCell(row, 'cmr'),
       lastInventoried: getCell(row, 'lastInventoried'),
@@ -165,17 +187,17 @@ async function main() {
       floorId: '',
       sectionId: '',
       roomId: '',
-      issueType: issueTypes[0] || '',
       issueTypes,
     });
   }
 
+  const mapped = assets.filter((a) => a.buildingId).length;
   writeFileSync(outputPath, JSON.stringify(assets, null, 2) + '\n');
   writeImportStatus({
     lastAssetImport: new Date().toISOString(),
     assetsImported: assets.length,
-    assetsMapped: 0,
-    assetsUnmapped: assets.length,
+    assetsMapped: mapped,
+    assetsUnmapped: assets.length - mapped,
   });
 
   console.log('AssetWorx import complete.');
@@ -183,6 +205,7 @@ async function main() {
   console.log(`  Blank rows skipped:              ${blankRows}`);
   console.log(`  Valid assets imported:           ${assets.length}`);
   console.log(`  Scanner misreads ignored:        ${scanErrorCount} (invalid "613 E..." format)`);
+  console.log(`  Unrecognized asset numbers:      ${unrecognizedCount}`);
   console.log(`  Records missing serial number:   ${missingSerialCount}`);
   console.log(`  Records marked Not Found in DB:  ${notFoundCount}`);
   console.log(`  New Asset Found / Offline Sync:  ${newAssetCount}`);

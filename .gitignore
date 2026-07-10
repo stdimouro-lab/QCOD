@@ -4,3 +4,7 @@ web/node_modules/
 web/dist/
 data/backups/*.json
 !data/backups/.gitkeep
+imports/*.xlsx
+imports/*.xls
+imports/*.csv
+!imports/.gitkeep

@@ -6,18 +6,33 @@ writes anything.
 
 ## 1. Importing AssetWorx data
 
+**Step 1 — copy your export to:**
+
 ```
-npm run import:assets -- "C:\path\to\ASSETS HOME COPY.xlsx"
+C:\dev\qcod\imports\ASSETS HOME COPY.xlsx
 ```
 
-Reads the first worksheet of an AssetWorx export and writes the normalized
-result to `data/assets.json`. Matches these columns (case-insensitive):
-`Name`, `Serial Number`, `Description`, `Location Name`, `CMR`,
-`Last Inventoried`, `Last Observed Time`, `Disposal Status`.
+The `imports\` folder is gitignored, so the real spreadsheet never gets
+committed to the repo.
+
+**Step 2 — run the import:**
+
+```
+npm run import:assets -- "C:\dev\qcod\imports\ASSETS HOME COPY.xlsx"
+```
+
+Reads the first worksheet and writes the normalized result to
+`data/assets.json`. Matches these columns (case-insensitive): `Name`,
+`Serial Number`, `Description`, `Location Name`, `CMR`, `Last Inventoried`,
+`Last Observed Time`, `Disposal Status`.
 
 Blank rows are skipped. Unknown/blank cell values are preserved as blank —
 never guessed. `data/import-status.json` is updated with the import
-timestamp and asset count.
+timestamp and asset counts.
+
+**Do not hand-edit `data/assets.json` after an import.** If something looks
+wrong, fix the source spreadsheet and re-run the import — it will overwrite
+the file cleanly.
 
 **Asset-number rule:** a valid asset number begins with `613 EE` (e.g.
 `613 EE12345`). A number that begins with `613 E` but is *missing* the
@@ -26,26 +41,43 @@ are excluded from the import entirely and are never treated as Research
 items.
 
 Records still get imported even when AssetWorx marked them **Not Found in
-DB**, **New Asset Found**, or **Offline Sync** — they're kept, but flagged
-with an `issueType` (and full `issueTypes` array) so the dashboard can
-surface them rather than hide them.
+DB**, **New Asset Found**, or **Offline Sync** (checked in both the
+Description and Disposal Status columns) — they're kept, but flagged in the
+`issueTypes` array so the dashboard can surface them rather than hide them.
+
+**No mapping is guessed.** Every imported asset starts with a blank
+`buildingId`/`floorId`/`sectionId`, even if `Location Name` looks like it
+obviously matches a known section — QCOD will not infer that connection
+for you.
 
 ## 2. Importing section progress
 
+**Step 1 — edit the current section list:**
+
 ```
-npm run import:sections -- "C:\path\to\section-progress.xlsx"
+data/templates/section_progress_current.csv
 ```
 
-Accepts `.csv` or `.xlsx`. Supported columns: `Building`, `Floor`, `Section`,
-`Status`, `Completion Percent`, `Expected Assets`, `Found Assets`,
-`Tagged Assets`, `Last Updated`, `Notes`. A blank template with real section
-names is at `data/templates/section_progress_template.csv`.
+This file already lists every configured Building 500 section (Floor 1 and
+Floor 2 — Basement sections aren't in it, since none exist yet). Fill in
+verified `Status`, `Completion Percent`, and asset columns; leave anything
+you don't know blank.
+
+**Step 2 — run the import:**
+
+```
+npm run import:sections -- "C:\dev\qcod\data\templates\section_progress_current.csv"
+```
+
+Accepts `.csv` or `.xlsx`.
 
 **This script only updates sections that already exist in
 `data/sections.json`.** It matches each row by Building + Floor + Section
-name (case-insensitive, whitespace-trimmed) and never creates a new section.
-If a row doesn't match anything, it's skipped and printed as an unmatched
-row rather than silently dropped.
+name — case-insensitive, whitespace-trimmed, and tolerant of common
+punctuation differences (apostrophes, dashes, slashes), so "Womens Clinic"
+still matches "Women's Clinic". It never creates a new section. If a row
+doesn't match anything, it's skipped and printed as an unmatched row rather
+than silently dropped.
 
 Blank cells in a matched row leave the existing value untouched — importing
 a file with an empty `Notes` column will not erase notes you already have.
@@ -73,7 +105,18 @@ Before writing any changes, the script copies the current
 ever need to undo an import, copy the relevant backup file back over
 `data/sections.json`.
 
-## 3. Files each importer touches
+## 3. Basement and room data
+
+Building 500's Basement floor exists in `data/floors.json` (`In Progress`,
+0 tracked sections) but has **no sections configured yet** — none are
+invented, and `section_progress_current.csv` intentionally excludes it.
+Once basement departments are verified, add them to `data/sections.json`
+the same way the other 28 sections were added, then they'll show up in the
+CSV template on the next regeneration.
+
+Room-level data remains pending approved floor-plan PDFs, same as before.
+
+## 4. Files each importer touches
 
 | Script | Reads | Writes |
 |---|---|---|
@@ -83,7 +126,7 @@ ever need to undo an import, copy the relevant backup file back over
 Neither script touches `data/buildings.json`, `data/floors.json`,
 `data/facilities.json`, or anything under `web/`.
 
-## 4. QC and Research — placeholders only
+## 5. QC and Research — placeholders only
 
 `data/templates/qc_import_template.csv` and
 `data/templates/research_import_template.csv` define the column layout QCOD
@@ -91,7 +134,7 @@ will eventually expect for those workflows. There is no importer for them
 yet and no QC/Research navigation in the app — these templates just reserve
 the format so real data can be dropped in later without a rework.
 
-## 5. After you import
+## 6. After you import
 
 Imports only touch the JSON files on disk — the running dev server or a
 built app won't pick up the change automatically.
@@ -100,3 +143,4 @@ built app won't pick up the change automatically.
 npm run dev        # restart if it was already running
 npm run build:web  # rebuild before deploying
 ```
+

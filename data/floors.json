@@ -1,5 +1,17 @@
 [
   {
+    "id": "500-B",
+    "buildingId": "500",
+    "name": "Basement",
+    "level": 0,
+    "expectedAssets": 0,
+    "foundAssets": 0,
+    "taggedAssets": 0,
+    "status": "in_progress",
+    "mapCompletionPct": 0,
+    "mapNotes": "Section-level information pending verification."
+  },
+  {
     "id": "500-1",
     "buildingId": "500",
     "name": "1st Floor",
