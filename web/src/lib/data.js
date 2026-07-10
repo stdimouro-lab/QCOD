@@ -6,8 +6,9 @@ import sections from '../../../data/sections.json';
 import rooms from '../../../data/rooms.json';
 import assets from '../../../data/assets.json';
 import statuses from '../../../data/statuses.json';
+import importStatus from '../../../data/import-status.json';
 
-export { project, facilities, buildings, floors, sections, rooms, assets, statuses };
+export { project, facilities, buildings, floors, sections, rooms, assets, statuses, importStatus };
 
 // Returns null (meaning "Pending") when the denominator is unknown or zero.
 // Never silently reports 0% for a total we don't actually have yet.
@@ -151,5 +152,33 @@ export function getCampusSummary() {
     sectionsComplete: statusCounts.completed,
     returnNeeded: statusCounts.return_needed,
     noAccess: statusCounts.no_access,
+  };
+}
+
+// ---- Imported asset helpers ----
+// Asset totals only ever come from data/assets.json once it's populated by
+// the import scripts. A blank/invalid asset number never counts as valid,
+// and an asset is only "mapped" once it carries a real buildingId — we
+// never infer a mapping from free-text location names.
+
+export function getValidAssets() {
+  return assets.filter((a) => (a.assetNumber ?? '').toString().trim() !== '');
+}
+
+export function getMappedAssets() {
+  return getValidAssets().filter((a) => (a.buildingId ?? '').toString().trim() !== '');
+}
+
+export function getUnmappedAssets() {
+  return getValidAssets().filter((a) => (a.buildingId ?? '').toString().trim() === '');
+}
+
+export function getAssetIssueCounts() {
+  const valid = getValidAssets();
+  const hasIssue = (a, type) => a.issueType === type || (Array.isArray(a.issueTypes) && a.issueTypes.includes(type));
+  return {
+    missingSerialNumber: valid.filter((a) => hasIssue(a, 'missing_serial_number')).length,
+    notFoundInDatabase: valid.filter((a) => hasIssue(a, 'not_found_in_db')).length,
+    newAssetOfflineSync: valid.filter((a) => hasIssue(a, 'new_asset_offline_sync')).length,
   };
 }

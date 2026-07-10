@@ -2,3 +2,5 @@ output/
 node_modules/
 web/node_modules/
 web/dist/
+data/backups/*.json
+!data/backups/.gitkeep

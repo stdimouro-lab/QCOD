@@ -4,22 +4,25 @@
  * Usage:
  *   npm run import:assets -- "C:\path\to\ASSETS HOME COPY.xlsx"
  *
- * This script does not modify floors, sections, or building data. It only
- * produces data/assets.json. It is safe to run against a real export —
- * unknown/blank values are preserved as blank rather than guessed.
+ * This script only writes data/assets.json (and updates data/import-status.json).
+ * It never touches floors, sections, or building data. Unknown/blank values are
+ * preserved as blank rather than guessed.
  */
 import ExcelJS from 'exceljs';
-import { writeFileSync } from 'fs';
+import { writeFileSync, readFileSync, existsSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const outputPath = join(__dirname, '..', 'data', 'assets.json');
+const dataDir = join(__dirname, '..', 'data');
+const outputPath = join(dataDir, 'assets.json');
+const statusPath = join(dataDir, 'import-status.json');
 
 // A valid QCOD asset number looks like: 613 EE##### (or another verified
 // length after "613 EE"). Records that begin with only "613 E" (missing the
 // second E) are known RFID scanner misreads, not valid research items —
-// they must be flagged as scan-format errors, never counted as real assets.
+// they must be flagged as scan-format errors, never counted as real assets,
+// and never classified into the Research module.
 const VALID_ASSET_NUMBER = /^613\s?EE\d+/i;
 const MISREAD_ASSET_NUMBER = /^613\s?E(?!E)/i;
 
@@ -41,11 +44,31 @@ const COLUMN_MAP = {
   'cmr': 'cmr',
   'last inventoried': 'lastInventoried',
   'last observed time': 'lastObservedTime',
-  'disposal status': 'status',
+  'disposal status': 'disposalStatus',
 };
 
 function normalizeHeader(h) {
   return (h ?? '').toString().trim().toLowerCase();
+}
+
+function writeImportStatus(patch) {
+  let current = {
+    lastAssetImport: '',
+    lastSectionImport: '',
+    assetsImported: 0,
+    assetsMapped: 0,
+    assetsUnmapped: 0,
+    sectionsUpdated: 0,
+  };
+  if (existsSync(statusPath)) {
+    try {
+      current = { ...current, ...JSON.parse(readFileSync(statusPath, 'utf8')) };
+    } catch {
+      // If the status file is corrupt, fall back to defaults rather than guessing.
+    }
+  }
+  const updated = { ...current, ...patch };
+  writeFileSync(statusPath, JSON.stringify(updated, null, 2) + '\n');
 }
 
 async function main() {
@@ -53,6 +76,7 @@ async function main() {
 
   if (!filePath) {
     console.error('Usage: npm run import:assets -- "C:\\path\\to\\ASSETS HOME COPY.xlsx"');
+    console.error('  Reads the first worksheet of an AssetWorx Excel export and writes data/assets.json.');
     process.exit(1);
   }
 
@@ -78,7 +102,6 @@ async function main() {
   let blankRows = 0;
   let validCount = 0;
   let scanErrorCount = 0;
-  let unrecognizedCount = 0;
   let missingSerialCount = 0;
   let notFoundCount = 0;
   let newAssetCount = 0;
@@ -88,6 +111,7 @@ async function main() {
     if (!col) return '';
     const val = row.getCell(col).value;
     if (val === null || val === undefined) return '';
+    if (val instanceof Date) return val.toISOString().slice(0, 10);
     if (typeof val === 'object' && val.text) return val.text.toString().trim();
     return val.toString().trim();
   };
@@ -106,45 +130,59 @@ async function main() {
 
     if (kind === 'scan_error') {
       scanErrorCount += 1;
-      continue; // excluded from normal asset counts, per import rules
+      continue; // excluded entirely — not imported, not a Research item
     }
-    if (kind === 'unrecognized') {
-      unrecognizedCount += 1;
-    }
-    if (kind === 'valid') {
-      validCount += 1;
-    }
+    if (kind === 'valid') validCount += 1;
 
     const serialNumber = getCell(row, 'serialNumber');
-    if (!serialNumber) missingSerialCount += 1;
+    const disposalStatus = getCell(row, 'disposalStatus');
+    const disposalLower = disposalStatus.toLowerCase();
 
-    const status = getCell(row, 'status');
-    const statusLower = status.toLowerCase();
-    if (statusLower.includes('not found')) notFoundCount += 1;
-    if (statusLower.includes('new asset') || statusLower.includes('offline sync')) newAssetCount += 1;
+    const issueTypes = [];
+    if (!serialNumber) {
+      issueTypes.push('missing_serial_number');
+      missingSerialCount += 1;
+    }
+    if (disposalLower.includes('not found')) {
+      issueTypes.push('not_found_in_db');
+      notFoundCount += 1;
+    }
+    if (disposalLower.includes('new asset') || disposalLower.includes('offline sync')) {
+      issueTypes.push('new_asset_offline_sync');
+      newAssetCount += 1;
+    }
 
     assets.push({
       assetNumber,
       serialNumber,
       description: getCell(row, 'description'),
+      locationName: getCell(row, 'locationName'),
+      cmr: getCell(row, 'cmr'),
+      lastInventoried: getCell(row, 'lastInventoried'),
+      lastObservedTime: getCell(row, 'lastObservedTime'),
+      disposalStatus,
       buildingId: '',
       floorId: '',
       sectionId: '',
       roomId: '',
-      locationName: getCell(row, 'locationName'),
-      lastInventoried: getCell(row, 'lastInventoried'),
-      status,
+      issueType: issueTypes[0] || '',
+      issueTypes,
     });
   }
 
   writeFileSync(outputPath, JSON.stringify(assets, null, 2) + '\n');
+  writeImportStatus({
+    lastAssetImport: new Date().toISOString(),
+    assetsImported: assets.length,
+    assetsMapped: 0,
+    assetsUnmapped: assets.length,
+  });
 
   console.log('AssetWorx import complete.');
   console.log(`  Total rows read:                 ${totalRows}`);
   console.log(`  Blank rows skipped:              ${blankRows}`);
   console.log(`  Valid assets imported:           ${assets.length}`);
-  console.log(`  Invalid scan-format records:     ${scanErrorCount} (ignored, likely "613 E..." misreads)`);
-  console.log(`  Unrecognized asset numbers:      ${unrecognizedCount}`);
+  console.log(`  Scanner misreads ignored:        ${scanErrorCount} (invalid "613 E..." format)`);
   console.log(`  Records missing serial number:   ${missingSerialCount}`);
   console.log(`  Records marked Not Found in DB:  ${notFoundCount}`);
   console.log(`  New Asset Found / Offline Sync:  ${newAssetCount}`);

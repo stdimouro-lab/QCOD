@@ -9,6 +9,7 @@ import SectionTable from './components/SectionTable';
 import BuildingSelector from './components/BuildingSelector';
 import BuildingCards from './components/BuildingCards';
 import ProjectInfo from './components/ProjectInfo';
+import DataStatus from './components/DataStatus';
 import { StatusDot } from './lib/status';
 
 const TABS = [
@@ -79,6 +80,7 @@ export default function App() {
           <>
             <StatCards />
             <ProjectInfo />
+            <DataStatus />
           </>
         )}
 
