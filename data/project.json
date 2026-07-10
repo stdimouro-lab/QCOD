@@ -1,8 +1,11 @@
 {
   "name": "Quality Control Operations Dashboard",
   "acronym": "QCOD",
+  "tagline": "Internal Operations Tool",
+  "description": "Campus-wide RFID inventory, tagging, quality control, and operational progress tracking.",
   "facility": "Martinsburg VA Medical Center",
   "phase": "Proof of Concept",
+  "version": "v0.1",
   "focusBuilding": "500",
   "scope": "Section progress, RFID scanning, asset tagging, return-needed areas, and no-access areas",
   "lastUpdated": "2026-07-09"

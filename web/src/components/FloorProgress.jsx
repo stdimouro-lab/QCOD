@@ -1,7 +1,17 @@
 import { pct, fmtNum, getSectionsForFloor } from '../lib/data';
 import { ProgressBar, StatusBadge } from '../lib/status';
+import EmptyState from './EmptyState';
 
-export default function FloorProgress({ floors }) {
+export default function FloorProgress({ floors, buildingConfigured = true }) {
+  if (!buildingConfigured) {
+    return (
+      <section className="panel">
+        <h2>Floor Progress</h2>
+        <EmptyState message="No detailed floor or section data has been configured for this building." />
+      </section>
+    );
+  }
+
   return (
     <section className="panel">
       <h2>Floor Progress</h2>

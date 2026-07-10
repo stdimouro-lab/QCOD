@@ -21,6 +21,7 @@ const statuses = readJson('statuses.json');
 
 const statusLabel = (key) => statuses[key]?.label ?? key;
 const statusSymbol = (key) => statuses[key]?.symbol ?? '';
+const statusText = (key) => (statusSymbol(key) ? `${statusSymbol(key)} ${statusLabel(key)}` : statusLabel(key));
 const pct = (num, den) => (den > 0 ? Math.round((num / den) * 100) : 0);
 
 const totalExpected = buildings.reduce((s, b) => s + b.expectedAssets, 0);
@@ -132,7 +133,7 @@ floors.forEach((f, i) => {
   r.getCell(4).value = f.taggedAssets;
   r.getCell(5).value = pct(f.taggedAssets, f.expectedAssets) / 100;
   r.getCell(5).numFmt = '0%';
-  r.getCell(6).value = `${statusSymbol(f.status)} ${statusLabel(f.status)}`;
+  r.getCell(6).value = statusText(f.status);
 });
 
 dash.getColumn(1).width = 28;
@@ -157,7 +158,7 @@ buildings.forEach((b, i) => {
   r.getCell(7).numFmt = '0%';
   r.getCell(8).value = pct(b.taggedAssets, b.expectedAssets) / 100;
   r.getCell(8).numFmt = '0%';
-  r.getCell(9).value = `${statusSymbol(b.status)} ${statusLabel(b.status)}`;
+  r.getCell(9).value = statusText(b.status);
 });
 autoWidth(bSheet);
 
@@ -180,7 +181,7 @@ floors.forEach((f, i) => {
   r.getCell(8).numFmt = '0%';
   r.getCell(9).value = (f.mapCompletionPct ?? 0) / 100;
   r.getCell(9).numFmt = '0%';
-  r.getCell(10).value = `${statusSymbol(f.status)} ${statusLabel(f.status)}`;
+  r.getCell(10).value = statusText(f.status);
   r.getCell(11).value = f.mapNotes ?? '';
 });
 autoWidth(fSheet);
@@ -208,7 +209,7 @@ sections.forEach((s, i) => {
   r.getCell(8).numFmt = '0%';
   r.getCell(9).value = s.assetCompletionPct / 100;
   r.getCell(9).numFmt = '0%';
-  r.getCell(10).value = `${statusSymbol(s.status)} ${statusLabel(s.status)}`;
+  r.getCell(10).value = statusText(s.status);
   r.getCell(11).value = s.notes;
   r.getCell(12).value = s.lastUpdate;
 });
@@ -229,7 +230,7 @@ outstanding.forEach((s, i) => {
   const r = oSheet.getRow(4 + i);
   r.getCell(1).value = s.name;
   r.getCell(2).value = floor?.name ?? s.floorId;
-  r.getCell(3).value = `${statusSymbol(s.status)} ${statusLabel(s.status)}`;
+  r.getCell(3).value = statusText(s.status);
   r.getCell(4).value = s.completionPct / 100;
   r.getCell(4).numFmt = '0%';
   r.getCell(5).value = s.notes;

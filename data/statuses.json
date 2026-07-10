@@ -1,7 +1,7 @@
 {
-  "completed": { "label": "Completed", "symbol": "🟢", "color": "#22c55e" },
-  "return_needed": { "label": "Return Needed", "symbol": "🟡", "color": "#eab308" },
-  "no_access": { "label": "No Access", "symbol": "🔴", "color": "#ef4444" },
-  "not_started": { "label": "Not Started", "symbol": "⚪", "color": "#94a3b8" },
-  "in_progress": { "label": "In Progress", "symbol": "🔵", "color": "#3b82f6" }
+  "completed": { "label": "Completed", "color": "#22c55e" },
+  "return_needed": { "label": "Scanned \u2014 Return Needed", "color": "#eab308" },
+  "no_access": { "label": "No Access", "color": "#ef4444" },
+  "not_started": { "label": "Not Started", "color": "#94a3b8" },
+  "in_progress": { "label": "In Progress", "color": "#3b82f6" }
 }

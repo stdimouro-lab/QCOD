@@ -1,14 +1,18 @@
 import { statuses } from './data';
 
 export function getStatusMeta(key) {
-  return statuses[key] ?? { label: key, symbol: '⚪', color: '#94a3b8' };
+  return statuses[key] ?? { label: key, color: '#94a3b8' };
+}
+
+export function StatusDot({ color }) {
+  return <span className="status-dot" style={{ background: color }} />;
 }
 
 export function StatusBadge({ status }) {
   const meta = getStatusMeta(status);
   return (
     <span className="status-badge" style={{ '--status-color': meta.color }}>
-      <span className="status-symbol">{meta.symbol}</span>
+      <StatusDot color={meta.color} />
       {meta.label}
     </span>
   );

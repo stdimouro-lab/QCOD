@@ -1,15 +1,19 @@
 import { useState } from 'react';
 import {
-  project, buildings, floors, sections,
-  getStatusCounts, getOutstandingSections,
+  project, buildings, statuses,
+  getBuilding, getFloorsForBuilding, getSectionsForBuilding, getOutstandingSections,
 } from './lib/data';
-import { statuses } from './lib/data';
 import StatCards from './components/StatCards';
 import FloorProgress from './components/FloorProgress';
 import SectionTable from './components/SectionTable';
+import BuildingSelector from './components/BuildingSelector';
+import BuildingCards from './components/BuildingCards';
+import ProjectInfo from './components/ProjectInfo';
+import { StatusDot } from './lib/status';
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
+  { id: 'buildings', label: 'Buildings' },
   { id: 'floors', label: 'Floors' },
   { id: 'sections', label: 'Sections' },
   { id: 'outstanding', label: 'Outstanding Work' },
@@ -17,27 +21,31 @@ const TABS = [
 
 export default function App() {
   const [tab, setTab] = useState('overview');
-  const statusCounts = getStatusCounts();
-  const outstanding = getOutstandingSections();
+  const [selectedBuildingId, setSelectedBuildingId] = useState(project.focusBuilding || '500');
+
+  const selectedBuilding = getBuilding(selectedBuildingId);
+  const buildingFloors = getFloorsForBuilding(selectedBuildingId);
+  const buildingSections = getSectionsForBuilding(selectedBuildingId);
+  const outstanding = getOutstandingSections(buildingSections);
   const returnNeeded = outstanding.filter((s) => s.status === 'return_needed');
   const noAccess = outstanding.filter((s) => s.status === 'no_access');
-  const building = buildings[0];
+
+  const handleSelectBuilding = (id) => setSelectedBuildingId(id);
 
   return (
     <div className="app">
       <header className="header">
         <div className="header-brand">
-          <p className="header-eyebrow">{project.acronym || 'QCOD'}</p>
+          <p className="header-eyebrow">{project.acronym}</p>
           <h1>Quality Control Operations Dashboard</h1>
-          <p className="header-sub">{project.facility}</p>
-          <p className="header-sub">
-            Building {project.focusBuilding} — {project.phase}
-          </p>
+          <p className="header-sub">{project.tagline} — {project.facility}</p>
+          <p className="header-sub">{project.description}</p>
+          <p className="header-sub">{project.phase} {project.version}</p>
         </div>
         <div className="status-legend">
           {Object.entries(statuses).map(([key, val]) => (
             <span key={key} className="legend-item">
-              {val.symbol} {val.label}
+              <StatusDot color={val.color} /> {val.label}
             </span>
           ))}
         </div>
@@ -62,17 +70,35 @@ export default function App() {
         ))}
       </nav>
 
+      {tab !== 'overview' && tab !== 'buildings' && (
+        <BuildingSelector selectedId={selectedBuildingId} onChange={handleSelectBuilding} />
+      )}
+
       <main>
-        {(tab === 'overview' || tab === 'floors') && (
-          <StatCards statusCounts={statusCounts} totalSections={sections.length} />
+        {tab === 'overview' && (
+          <>
+            <StatCards />
+            <ProjectInfo />
+          </>
         )}
 
-        {(tab === 'overview' || tab === 'floors') && (
-          <FloorProgress floors={floors} />
+        {tab === 'buildings' && (
+          <BuildingCards buildings={buildings} onSelect={handleSelectBuilding} />
+        )}
+
+        {tab === 'floors' && (
+          <FloorProgress floors={buildingFloors} buildingConfigured={!!selectedBuilding?.configured} />
         )}
 
         {tab === 'sections' && (
-          <SectionTable sections={sections} title="Sections" />
+          selectedBuilding?.configured ? (
+            <SectionTable sections={buildingSections} title={`Sections — Building ${selectedBuildingId}`} />
+          ) : (
+            <section className="panel">
+              <h2>Sections</h2>
+              <p className="empty-note">No detailed floor or section data has been configured for this building.</p>
+            </section>
+          )
         )}
 
         {tab === 'outstanding' && (
@@ -92,7 +118,8 @@ export default function App() {
       </main>
 
       <footer className="footer">
-        QCOD complements AssetWorx — room-level tracking pending official floor plan PDFs.
+        QCOD is an internal operations tool designed to complement RFID asset inventory systems by
+        providing campus, building, floor, section, and quality-control visibility.
       </footer>
     </div>
   );
