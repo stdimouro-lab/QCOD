@@ -1,0 +1,6 @@
+asset_id,rfid_tag,building,floor,section,room,description,inventory_status,tagged,last_seen_date
+AWX-001234,,500,1,Emergency Department,,Monitor Patient,Located,Yes,2026-07-08
+AWX-001235,,500,1,Emergency Department,,IV Pump,Located,Yes,2026-07-08
+AWX-001236,,500,2,CPC 1,,Exam Table,Located,Yes,2026-07-07
+AWX-001237,,500,3,Surgery,,Surgical Light,Located,No,2026-07-06
+AWX-001238,,500,3,Sterile Processing,,Autoclave,Not Found,No,2026-07-03

@@ -1,0 +1,8 @@
+[
+  { "id": "500-B", "buildingId": "500", "name": "Basement", "level": 0, "expectedAssets": 420, "foundAssets": 318, "taggedAssets": 295, "status": "in_progress" },
+  { "id": "500-1", "buildingId": "500", "name": "1st Floor", "level": 1, "expectedAssets": 890, "foundAssets": 812, "taggedAssets": 780, "status": "in_progress" },
+  { "id": "500-2", "buildingId": "500", "name": "2nd Floor", "level": 2, "expectedAssets": 1120, "foundAssets": 945, "taggedAssets": 902, "status": "in_progress" },
+  { "id": "500-3", "buildingId": "500", "name": "3rd Floor", "level": 3, "expectedAssets": 980, "foundAssets": 710, "taggedAssets": 648, "status": "in_progress" },
+  { "id": "500-4", "buildingId": "500", "name": "4th Floor", "level": 4, "expectedAssets": 760, "foundAssets": 612, "taggedAssets": 578, "status": "in_progress" },
+  { "id": "500-5", "buildingId": "500", "name": "5th Floor", "level": 5, "expectedAssets": 650, "foundAssets": 515, "taggedAssets": 445, "status": "in_progress" }
+]

@@ -1,0 +1,10 @@
+{
+  "500-B": { "name": "Basement", "level": 0, "mapCompletionPct": 95, "mapNotes": "Field map ~95% green dots, ~3 red (no access) rooms" },
+  "500-1": { "name": "1st Floor", "level": 1, "mapCompletionPct": 85, "mapNotes": "Field map ~85% green, red/yellow clusters remain; wayfinding map shows 17 departments marked complete" },
+  "500-2": { "name": "2nd Floor", "level": 2, "mapCompletionPct": 15, "mapNotes": "~22 rooms marked complete in top-right Tuscarora wing (Surgical/Vascular/Wound Care)" },
+  "500-3": { "name": "3rd Floor", "level": 3, "mapCompletionPct": 0, "mapNotes": "Not yet inventoried" },
+  "500-4": { "name": "4th Floor", "level": 4, "mapCompletionPct": 0, "mapNotes": "Not yet inventoried" },
+  "500-5": { "name": "5th Floor", "level": 5, "mapCompletionPct": 0, "mapNotes": "Not yet inventoried" },
+  "500-6": { "name": "6th Floor", "level": 6, "mapCompletionPct": 0, "mapNotes": "Not yet inventoried" },
+  "500-8": { "name": "8th Floor", "level": 8, "mapCompletionPct": 0, "mapNotes": "Not yet inventoried" }
+}

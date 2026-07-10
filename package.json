@@ -1,0 +1,17 @@
+{
+  "name": "qcod",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Quality Control Operations Dashboard — Martinsburg VA Medical Center",
+  "scripts": {
+    "generate:excel": "node scripts/generate-excel.js",
+    "sync:data": "node scripts/sync-data.js",
+    "dev": "npm run dev --prefix web",
+    "build:web": "npm run build --prefix web",
+    "install:all": "npm install && npm install --prefix web"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0"
+  }
+}

@@ -1,0 +1,11 @@
+[
+  {
+    "id": "500",
+    "name": "Building 500",
+    "description": "Main clinical and administrative building",
+    "expectedAssets": 4820,
+    "foundAssets": 3912,
+    "taggedAssets": 3648,
+    "status": "in_progress"
+  }
+]
