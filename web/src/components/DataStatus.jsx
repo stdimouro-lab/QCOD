@@ -1,4 +1,7 @@
-import { importStatus, getValidAssets, getMappedAssets, getUnmappedAssets } from '../lib/data';
+import {
+  getImportStatus, getValidAssets, getMappedAssets, getUnmappedAssets,
+  getQcPreview, getResearchPreview,
+} from '../lib/data';
 
 function fmtTimestamp(value) {
   if (!value) return 'Not Imported';
@@ -7,17 +10,20 @@ function fmtTimestamp(value) {
 }
 
 export default function DataStatus() {
+  const importStatus = getImportStatus();
   const validAssets = getValidAssets();
   const mapped = getMappedAssets();
   const unmapped = getUnmappedAssets();
 
   const rows = [
     ['Assets Imported', validAssets.length],
-    ['Assets Mapped to Building', mapped.length],
-    ['Assets Unmapped', unmapped.length],
-    ['Sections Updated', importStatus.sectionsUpdated || 0],
+    ['Mapped Assets', mapped.length],
+    ['Unmapped Assets', unmapped.length],
+    ['QC Rows Previewed', getQcPreview().length],
+    ['Research Rows Previewed', getResearchPreview().length],
     ['Last Asset Import', fmtTimestamp(importStatus.lastAssetImport)],
-    ['Last Section Update', fmtTimestamp(importStatus.lastSectionImport)],
+    ['Last Section Import', fmtTimestamp(importStatus.lastSectionImport)],
+    ['Last Backup Export', fmtTimestamp(importStatus.lastBackupExport)],
   ];
 
   return (

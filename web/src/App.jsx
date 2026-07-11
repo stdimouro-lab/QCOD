@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   project, buildings, statuses,
   getBuilding, getFloorsForBuilding, getSectionsForBuilding, getOutstandingSections,
+  onDataChanged,
 } from './lib/data';
 import StatCards from './components/StatCards';
 import FloorProgress from './components/FloorProgress';
@@ -10,6 +11,8 @@ import BuildingSelector from './components/BuildingSelector';
 import BuildingCards from './components/BuildingCards';
 import ProjectInfo from './components/ProjectInfo';
 import DataStatus from './components/DataStatus';
+import ImportCenter from './components/ImportCenter';
+import ReportCenter from './components/ReportCenter';
 import { StatusDot } from './lib/status';
 
 const TABS = [
@@ -18,11 +21,19 @@ const TABS = [
   { id: 'floors', label: 'Floors' },
   { id: 'sections', label: 'Sections' },
   { id: 'outstanding', label: 'Outstanding Work' },
+  { id: 'imports', label: 'Imports' },
+  { id: 'reports', label: 'Reports' },
 ];
 
 export default function App() {
   const [tab, setTab] = useState('overview');
   const [selectedBuildingId, setSelectedBuildingId] = useState(project.focusBuilding || '500');
+  // Bumped whenever an import/backup/clear writes to localStorage, so every
+  // getSections()/getAssets() call below re-reads fresh data on re-render —
+  // the dashboard updates immediately without a page reload.
+  const [, setDataVersion] = useState(0);
+
+  useEffect(() => onDataChanged(() => setDataVersion((v) => v + 1)), []);
 
   const selectedBuilding = getBuilding(selectedBuildingId);
   const buildingFloors = getFloorsForBuilding(selectedBuildingId);
@@ -71,7 +82,7 @@ export default function App() {
         ))}
       </nav>
 
-      {tab !== 'overview' && tab !== 'buildings' && (
+      {tab !== 'overview' && tab !== 'buildings' && tab !== 'imports' && tab !== 'reports' && (
         <BuildingSelector selectedId={selectedBuildingId} onChange={handleSelectBuilding} />
       )}
 
@@ -117,6 +128,10 @@ export default function App() {
             />
           </>
         )}
+
+        {tab === 'imports' && <ImportCenter />}
+
+        {tab === 'reports' && <ReportCenter />}
       </main>
 
       <footer className="footer">
