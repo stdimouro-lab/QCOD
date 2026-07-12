@@ -1,10 +1,26 @@
+# Build output and dependencies
 output/
 node_modules/
 web/node_modules/
 web/dist/
-data/backups/*.json
-!data/backups/.gitkeep
+
+# Imported operational files
 imports/*.xlsx
 imports/*.xls
 imports/*.csv
 !imports/.gitkeep
+
+# Generated backups and private data
+data/backups/*.json
+!data/backups/.gitkeep
+data/generated/
+data/private/
+reports/generated/
+
+# Private or restricted facility documents
+private-source-documents/
+assets/floor-plans/
+
+# Architectural drawing formats
+*.dwg
+*.dxf

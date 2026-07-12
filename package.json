@@ -11,7 +11,8 @@
     "import:sections": "node scripts/import-section-progress.js",
     "dev": "npm run dev --prefix web",
     "build:web": "npm run build --prefix web",
-    "install:all": "npm install && npm install --prefix web"
+    "install:all": "npm install && npm install --prefix web",
+    "setup:source-folders": "powershell -ExecutionPolicy Bypass -File scripts/setup-private-source-folders.ps1"
   },
   "dependencies": {
     "exceljs": "^4.4.0"
