@@ -267,17 +267,346 @@ export function previewSectionRows(rows, sectionsData, floorsData) {
 export function applySectionPreview(preview, sectionsData) {
   const updated = sectionsData.map((s) => ({ ...s }));
   let updatedCount = 0;
+  const historyEntries = [];
 
   preview.forEach((item) => {
     if (!item.matched) return;
     const target = updated.find((s) => s.id === item.section.id);
     if (!target) return;
+
+    const previousStatus = target.status;
+    const previousCompletionPct = target.completionPct || 0;
+    const previousNote = target.notes || '';
+
     Object.assign(target, item.patch);
     target.assetCompletionPct = target.expectedAssets > 0
       ? Math.round((target.taggedAssets / target.expectedAssets) * 100)
       : 0;
     updatedCount += 1;
+
+    // Only log a history entry when something a person actually cares about
+    // changed — status, completion percent, or notes — not on every import
+    // even when a row only touched, say, expected asset counts.
+    const statusChanged = target.status !== previousStatus;
+    const pctChanged = (target.completionPct || 0) !== previousCompletionPct;
+    const noteChanged = (target.notes || '') !== previousNote;
+    if (statusChanged || pctChanged || noteChanged) {
+      historyEntries.push({
+        id: `${target.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        sectionId: target.id,
+        previousStatus,
+        newStatus: target.status,
+        previousCompletionPct,
+        newCompletionPct: target.completionPct || 0,
+        note: target.notes || '',
+        updatedAt: new Date().toISOString(),
+      });
+    }
   });
 
-  return { sections: updated, updatedCount };
+  return { sections: updated, updatedCount, historyEntries };
+}
+
+// ---- Configuration imports (Facilities / Buildings / Floors / Sections / Rooms) ----
+//
+// Every row is validated and classified into create/update/skip *before*
+// anything is applied. Parent relationships (building needs a facility,
+// floor needs a building, etc.) are checked against real existing records —
+// never guessed or auto-created. A row with a broken or missing parent is
+// always skipped, never silently attached to the wrong place.
+
+function friendlyStatusOrDefault(raw) {
+  const { status, valid } = normalizeStatus(raw);
+  if (!raw) return { status: 'not_started', warning: null };
+  if (!valid) return { status: 'not_started', warning: `Unrecognized status "${raw}" — defaulted to Not Started` };
+  return { status, warning: null };
+}
+
+function toBool(raw) {
+  const v = normKey(raw);
+  return v === 'yes' || v === 'true' || v === '1';
+}
+
+export function previewFacilityRows(rows, existingFacilities = []) {
+  const seenIds = new Set();
+  return rows.map((row) => {
+    const id = getField(row, 'Facility ID');
+    const name = getField(row, 'Facility Name');
+    const city = getField(row, 'City');
+    const state = getField(row, 'State');
+    const statusRaw = getField(row, 'Status');
+    const notes = getField(row, 'Notes');
+
+    const errors = [];
+    const warnings = [];
+    if (!id) errors.push('Facility ID is required');
+    if (!name) errors.push('Facility Name is required');
+    if (id && seenIds.has(normKey(id))) errors.push('Duplicate Facility ID within this import batch');
+    if (id) seenIds.add(normKey(id));
+
+    const existing = existingFacilities.find((f) => normKey(f.id) === normKey(id));
+    const { status, warning } = friendlyStatusOrDefault(statusRaw);
+    if (warning) warnings.push(warning);
+
+    const valid = errors.length === 0;
+    const action = !valid ? 'skip' : existing ? 'update' : 'create';
+    const normalized = valid ? {
+      id, name,
+      city: city || existing?.city || '',
+      state: state || existing?.state || '',
+      status: statusRaw ? status : (existing?.status || 'not_started'),
+      notes: notes || existing?.notes || '',
+    } : null;
+
+    return { matched: !!existing, valid, action, errors, warnings, normalized, raw: row };
+  });
+}
+
+export function previewBuildingRows(rows, existingBuildings = [], existingFacilities = []) {
+  const seenIds = new Set();
+  return rows.map((row) => {
+    const facilityId = getField(row, 'Facility ID');
+    const id = getField(row, 'Building ID');
+    const name = getField(row, 'Building Name');
+    const statusRaw = getField(row, 'Status');
+    const configuredRaw = getField(row, 'Configured');
+    const notes = getField(row, 'Notes');
+
+    const errors = [];
+    const warnings = [];
+    if (!facilityId) errors.push('Facility ID is required');
+    else if (!existingFacilities.some((f) => normKey(f.id) === normKey(facilityId))) {
+      errors.push(`Facility ID "${facilityId}" does not exist — import that facility first`);
+    }
+    if (!id) errors.push('Building ID is required');
+    if (!name) errors.push('Building Name is required');
+    const dupKey = `${normKey(facilityId)}::${normKey(id)}`;
+    if (id && facilityId && seenIds.has(dupKey)) errors.push('Duplicate Building ID within this facility in this import batch');
+    if (id && facilityId) seenIds.add(dupKey);
+
+    const existing = existingBuildings.find((b) => normKey(b.id) === normKey(id) && normKey(b.facilityId) === normKey(facilityId));
+    const { status, warning } = friendlyStatusOrDefault(statusRaw);
+    if (warning) warnings.push(warning);
+
+    const valid = errors.length === 0;
+    const action = !valid ? 'skip' : existing ? 'update' : 'create';
+    const normalized = valid ? {
+      id, facilityId, name,
+      status: statusRaw ? status : (existing?.status || 'not_started'),
+      configured: configuredRaw ? toBool(configuredRaw) : (existing?.configured ?? false),
+      notes: notes || existing?.notes || '',
+      expectedAssets: existing?.expectedAssets ?? 0,
+      foundAssets: existing?.foundAssets ?? 0,
+      taggedAssets: existing?.taggedAssets ?? 0,
+    } : null;
+
+    return { matched: !!existing, valid, action, errors, warnings, normalized, raw: row };
+  });
+}
+
+export function previewFloorRows(rows, existingFloors = [], existingBuildings = []) {
+  const seenIds = new Set();
+  return rows.map((row) => {
+    const facilityId = getField(row, 'Facility ID');
+    const buildingId = getField(row, 'Building ID');
+    const id = getField(row, 'Floor ID');
+    const name = getField(row, 'Floor Name');
+    const levelRaw = getField(row, 'Level');
+    const statusRaw = getField(row, 'Status');
+    const notes = getField(row, 'Notes');
+
+    const errors = [];
+    const warnings = [];
+    if (!facilityId) errors.push('Facility ID is required');
+    if (!buildingId) errors.push('Building ID is required');
+    else if (!existingBuildings.some((b) => normKey(b.id) === normKey(buildingId) && normKey(b.facilityId) === normKey(facilityId))) {
+      errors.push(`Building ID "${buildingId}" does not exist for facility "${facilityId}"`);
+    }
+    if (!id) errors.push('Floor ID is required');
+    if (!name) errors.push('Floor Name is required');
+    if (id && seenIds.has(normKey(id))) errors.push('Duplicate Floor ID within this import batch');
+    if (id) seenIds.add(normKey(id));
+
+    let level = null;
+    if (levelRaw !== '') {
+      const num = Number(levelRaw);
+      if (Number.isNaN(num)) errors.push(`Level "${levelRaw}" is not numeric`);
+      else level = num;
+    }
+
+    const existing = existingFloors.find((f) => normKey(f.id) === normKey(id));
+    const { status, warning } = friendlyStatusOrDefault(statusRaw);
+    if (warning) warnings.push(warning);
+
+    const valid = errors.length === 0;
+    const action = !valid ? 'skip' : existing ? 'update' : 'create';
+    const normalized = valid ? {
+      id, facilityId, buildingId, name,
+      level: level !== null ? level : (existing?.level ?? 0),
+      status: statusRaw ? status : (existing?.status || 'not_started'),
+      notes: notes || existing?.notes || '',
+      expectedAssets: existing?.expectedAssets ?? 0,
+      foundAssets: existing?.foundAssets ?? 0,
+      taggedAssets: existing?.taggedAssets ?? 0,
+      mapCompletionPct: existing?.mapCompletionPct ?? 0,
+      mapNotes: existing?.mapNotes ?? '',
+    } : null;
+
+    return { matched: !!existing, valid, action, errors, warnings, normalized, raw: row };
+  });
+}
+
+export function previewSectionConfigRows(rows, existingSections = [], existingFloors = []) {
+  const seenIds = new Set();
+  return rows.map((row) => {
+    const facilityId = getField(row, 'Facility ID');
+    const buildingId = getField(row, 'Building ID');
+    const floorId = getField(row, 'Floor ID');
+    const id = getField(row, 'Section ID');
+    const name = getField(row, 'Section Name');
+    const statusRaw = getField(row, 'Status');
+    const notes = getField(row, 'Notes');
+
+    const errors = [];
+    const warnings = [];
+    if (!facilityId) errors.push('Facility ID is required');
+    if (!buildingId) errors.push('Building ID is required');
+    if (!floorId) errors.push('Floor ID is required');
+    else if (!existingFloors.some((f) => normKey(f.id) === normKey(floorId) && normKey(f.buildingId) === normKey(buildingId))) {
+      errors.push(`Floor ID "${floorId}" does not exist for building "${buildingId}"`);
+    }
+    if (!id) errors.push('Section ID is required');
+    if (!name) errors.push('Section Name is required');
+    if (id && seenIds.has(normKey(id))) errors.push('Duplicate Section ID within this import batch');
+    if (id) seenIds.add(normKey(id));
+
+    const existing = existingSections.find((s) => normKey(s.id) === normKey(id));
+    const { status, warning } = friendlyStatusOrDefault(statusRaw);
+    if (warning) warnings.push(warning);
+
+    const completionPct = clampPct(getField(row, 'Completion Percent'));
+    const expectedAssets = toIntOrNull(getField(row, 'Expected Assets'));
+    const foundAssets = toIntOrNull(getField(row, 'Found Assets'));
+    const taggedAssets = toIntOrNull(getField(row, 'Tagged Assets'));
+    const lastUpdated = getField(row, 'Last Updated');
+
+    const valid = errors.length === 0;
+    const action = !valid ? 'skip' : existing ? 'update' : 'create';
+    const finalExpected = expectedAssets !== null ? expectedAssets : (existing?.expectedAssets ?? 0);
+    const finalTagged = taggedAssets !== null ? taggedAssets : (existing?.taggedAssets ?? 0);
+    const normalized = valid ? {
+      id, facilityId, buildingId, floorId, name,
+      status: statusRaw ? status : (existing?.status || 'not_started'),
+      completionPct: completionPct !== null ? completionPct : (existing?.completionPct ?? 0),
+      expectedAssets: finalExpected,
+      foundAssets: foundAssets !== null ? foundAssets : (existing?.foundAssets ?? 0),
+      taggedAssets: finalTagged,
+      assetCompletionPct: finalExpected > 0 ? Math.round((finalTagged / finalExpected) * 100) : 0,
+      lastUpdate: lastUpdated || existing?.lastUpdate || '',
+      notes: notes || existing?.notes || '',
+    } : null;
+
+    return { matched: !!existing, valid, action, errors, warnings, normalized, raw: row };
+  });
+}
+
+export function previewRoomRows(rows, existingRooms = [], existingSections = []) {
+  const seenIds = new Set();
+  return rows.map((row) => {
+    const facilityId = getField(row, 'Facility ID');
+    const buildingId = getField(row, 'Building ID');
+    const floorId = getField(row, 'Floor ID');
+    const sectionId = getField(row, 'Section ID');
+    const id = getField(row, 'Room ID');
+    const roomNumber = getField(row, 'Room Number');
+    const roomName = getField(row, 'Room Name');
+    const statusRaw = getField(row, 'Status');
+    const lastUpdated = getField(row, 'Last Updated');
+    const notes = getField(row, 'Notes');
+
+    const errors = [];
+    const warnings = [];
+    if (!facilityId) errors.push('Facility ID is required');
+    if (!buildingId) errors.push('Building ID is required');
+    if (!floorId) errors.push('Floor ID is required');
+    if (!sectionId) errors.push('Section ID is required');
+    else if (!existingSections.some((s) => normKey(s.id) === normKey(sectionId) && normKey(s.floorId) === normKey(floorId))) {
+      errors.push(`Section ID "${sectionId}" does not exist on floor "${floorId}"`);
+    }
+    if (!id) errors.push('Room ID is required');
+    if (!roomNumber) errors.push('Room Number is required');
+    if (id && seenIds.has(normKey(id))) errors.push('Duplicate Room ID within this import batch');
+    if (id) seenIds.add(normKey(id));
+
+    const existing = existingRooms.find((r) => normKey(r.id) === normKey(id));
+    const { status, warning } = friendlyStatusOrDefault(statusRaw);
+    if (warning) warnings.push(warning);
+
+    const valid = errors.length === 0;
+    const action = !valid ? 'skip' : existing ? 'update' : 'create';
+    const normalized = valid ? {
+      id, facilityId, buildingId, floorId, sectionId,
+      roomNumber, name: roomName || existing?.name || '',
+      status: statusRaw ? status : (existing?.status || 'not_started'),
+      lastUpdate: lastUpdated || existing?.lastUpdate || '',
+      notes: notes || existing?.notes || '',
+    } : null;
+
+    return { matched: !!existing, valid, action, errors, warnings, normalized, raw: row };
+  });
+}
+
+// ---- Apply configuration imports ----
+// Applies only the valid rows from a preview array onto an existing dataset,
+// keyed by the entity's own ID. Invalid rows are always excluded.
+
+function applyConfigPreview(preview, existingData, idKey = 'id') {
+  const updated = existingData.map((r) => ({ ...r }));
+  let created = 0;
+  let updatedCount = 0;
+  let skipped = 0;
+
+  preview.forEach((item) => {
+    if (!item.valid || item.action === 'skip') {
+      skipped += 1;
+      return;
+    }
+    const idx = updated.findIndex((r) => normKey(r[idKey]) === normKey(item.normalized[idKey]));
+    if (idx >= 0) {
+      updated[idx] = { ...updated[idx], ...item.normalized };
+      updatedCount += 1;
+    } else {
+      updated.push(item.normalized);
+      created += 1;
+    }
+  });
+
+  return { data: updated, created, updated: updatedCount, skipped };
+}
+
+export function applyFacilityImport(preview, existingFacilities) {
+  return applyConfigPreview(preview, existingFacilities);
+}
+
+export function applyBuildingImport(preview, existingBuildings) {
+  return applyConfigPreview(preview, existingBuildings);
+}
+
+export function applyFloorImport(preview, existingFloors) {
+  return applyConfigPreview(preview, existingFloors);
+}
+
+export function applySectionConfigImport(preview, existingSections) {
+  return applyConfigPreview(preview, existingSections);
+}
+
+export function applyRoomImport(preview, existingRooms) {
+  return applyConfigPreview(preview, existingRooms);
+}
+
+// Builds a downloadable error report (rows that failed validation).
+export function buildErrorReportRows(preview) {
+  return preview
+    .filter((item) => !item.valid)
+    .map((item) => ({ ...item.raw, __errors: item.errors.join('; ') }));
 }

@@ -1,6 +1,10 @@
-import { buildings } from '../lib/data';
+import { getBuildings } from '../lib/data';
 
-export default function BuildingSelector({ selectedId, onChange }) {
+export default function BuildingSelector({ selectedId, onChange, facilityId }) {
+  const buildings = facilityId
+    ? getBuildings().filter((b) => b.facilityId === facilityId)
+    : getBuildings();
+
   return (
     <div className="building-selector">
       <label htmlFor="building-select">Building</label>

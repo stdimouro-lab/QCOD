@@ -2,7 +2,8 @@
   {
     "id": "martinsburg-va",
     "name": "Martinsburg VA Medical Center",
-    "location": "Martinsburg, West Virginia",
+    "city": "Martinsburg",
+    "state": "WV",
     "status": "in_progress",
     "notes": "QCOD proof-of-concept facility."
   }

@@ -327,6 +327,11 @@ body {
   border: 1px solid transparent;
 }
 
+.btn-small {
+  padding: 0.25rem 0.6rem;
+  font-size: 0.72rem;
+}
+
 .btn-primary {
   background: var(--navy);
   color: #fff;
@@ -357,6 +362,17 @@ body {
   margin-bottom: 1.25rem;
   font-size: 0.85rem;
   color: var(--slate-600);
+}
+
+.selector-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.selector-row .building-selector {
+  margin-bottom: 1rem;
 }
 
 .building-selector select {
@@ -571,7 +587,73 @@ tbody tr:hover {
 }
 
 @media (max-width: 640px) {
-  .header { padding: 1.25rem; }
+  .header { padding: 1.25rem; flex-direction: column; align-items: flex-start; gap: 1rem; }
   .header h1 { font-size: 1.2rem; }
   .stat-value { font-size: 1.4rem; }
+
+  /* Cards collapse to one column on small screens */
+  .stat-grid, .building-grid, .floor-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Filter rows stack vertically instead of wrapping awkwardly */
+  .import-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .import-controls label {
+    width: 100%;
+  }
+  .import-controls select,
+  .import-controls input[type="date"],
+  .import-controls input[type="file"],
+  .import-controls input[type="text"] {
+    width: 100%;
+    font-size: 0.9rem; /* keep interactive controls readable and tappable */
+    padding: 0.6rem 0.7rem;
+  }
+
+  .selector-row {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .building-selector {
+    width: 100%;
+  }
+  .building-selector select {
+    flex: 1;
+  }
+
+  /* Buttons stay easy to tap: full width, no sub-12px text */
+  .import-actions {
+    flex-direction: column;
+  }
+  .btn-primary, .btn-secondary, .btn-danger {
+    width: 100%;
+    text-align: center;
+    padding: 0.65rem 1rem;
+    font-size: 0.85rem;
+  }
+  .btn-small {
+    width: auto;
+    font-size: 0.75rem;
+    padding: 0.4rem 0.7rem;
+  }
+  .file-btn {
+    justify-content: center;
+  }
+
+  /* Tabs wrap cleanly with tappable targets */
+  .tabs {
+    gap: 0.4rem;
+  }
+  .tabs button {
+    padding: 0.55rem 0.8rem;
+    font-size: 0.8rem;
+  }
+
+  /* Tables already scroll horizontally via .table-wrap; just ensure text stays readable */
+  table {
+    font-size: 0.78rem;
+  }
 }

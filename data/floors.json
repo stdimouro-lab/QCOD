@@ -1,6 +1,7 @@
 [
   {
     "id": "500-B",
+    "facilityId": "martinsburg-va",
     "buildingId": "500",
     "name": "Basement",
     "level": 0,
@@ -13,6 +14,7 @@
   },
   {
     "id": "500-1",
+    "facilityId": "martinsburg-va",
     "buildingId": "500",
     "name": "1st Floor",
     "level": 1,
@@ -25,6 +27,7 @@
   },
   {
     "id": "500-2",
+    "facilityId": "martinsburg-va",
     "buildingId": "500",
     "name": "2nd Floor",
     "level": 2,
@@ -37,6 +40,7 @@
   },
   {
     "id": "500-3",
+    "facilityId": "martinsburg-va",
     "buildingId": "500",
     "name": "3rd Floor",
     "level": 3,
@@ -49,6 +53,7 @@
   },
   {
     "id": "500-4",
+    "facilityId": "martinsburg-va",
     "buildingId": "500",
     "name": "4th Floor",
     "level": 4,
@@ -61,6 +66,7 @@
   },
   {
     "id": "500-5",
+    "facilityId": "martinsburg-va",
     "buildingId": "500",
     "name": "5th Floor",
     "level": 5,
@@ -73,6 +79,7 @@
   },
   {
     "id": "500-6",
+    "facilityId": "martinsburg-va",
     "buildingId": "500",
     "name": "6th Floor",
     "level": 6,

@@ -1,43 +1,92 @@
 import { useState } from 'react';
 import {
-  getSections, floors, LOCAL_KEYS, saveLocalData, saveImportStatus,
-  exportQcodBackup, importQcodBackup, clearLocalData, getAssets,
+  getSections, getFloors, getBuildings, getRooms, getFacilities,
+  LOCAL_KEYS, saveLocalData, saveImportStatus,
+  exportQcodBackup, importQcodBackup, clearLocalData, getAssets, appendSectionHistory,
 } from '../lib/data';
 import {
   readWorkbookFile, getWorksheetNames, worksheetToRows, downloadJson,
   normalizeAssetRows, previewSectionRows, applySectionPreview, getField,
+  previewFacilityRows, previewBuildingRows, previewFloorRows, previewSectionConfigRows, previewRoomRows,
+  applyFacilityImport, applyBuildingImport, applyFloorImport, applySectionConfigImport, applyRoomImport,
+  buildErrorReportRows,
 } from '../lib/fileImport';
 
 const IMPORT_TYPES = [
   {
-    id: 'assetworx',
-    label: 'AssetWorx Inventory',
-    accept: '.xlsx,.xls,.csv',
+    id: 'assetworx', label: 'AssetWorx Inventory', group: 'Data Imports',
+    accept: '.xlsx,.xls,.csv', kind: 'assetworx',
     requiredHeaders: ['Name', 'Serial Number', 'Description', 'Location Name', 'CMR', 'Last Inventoried', 'Last Observed Time', 'Disposal Status'],
-    previewOnly: false,
   },
   {
-    id: 'section',
-    label: 'Section Progress',
-    accept: '.xlsx,.xls,.csv',
+    id: 'section', label: 'Section Progress', group: 'Data Imports',
+    accept: '.xlsx,.xls,.csv', kind: 'section',
     requiredHeaders: ['Building', 'Floor', 'Section', 'Status', 'Completion Percent', 'Expected Assets', 'Found Assets', 'Tagged Assets', 'Last Updated', 'Notes'],
-    previewOnly: false,
   },
   {
-    id: 'qc',
-    label: 'Daily QC Log',
-    accept: '.xlsx,.xls,.csv',
-    requiredHeaders: ['Date', 'Building', 'Floor', 'Section', 'Department Area', 'Tag Location', 'Equipment Description', 'EE Tag Number', 'Serial Number', 'QC Status', 'Notes'],
-    previewOnly: true,
+    id: 'qc', label: 'Daily QC Log', group: 'Data Imports',
+    accept: '.xlsx,.xls,.csv', kind: 'generic', recordKey: LOCAL_KEYS.qcRecords, statusKey: 'lastQcImport',
+    requiredHeaders: ['Date', 'Facility', 'Building', 'Floor', 'Section', 'Department Area', 'Tag Location', 'Equipment Description', 'EE Tag Number', 'Serial Number', 'QC Status', 'Notes'],
   },
   {
-    id: 'research',
-    label: 'Research Items',
-    accept: '.xlsx,.xls,.csv',
-    requiredHeaders: ['Date Found', 'Building', 'Floor', 'Section', 'Asset Number', 'Serial Number', 'Description', 'Issue Type', 'Status', 'Notes'],
-    previewOnly: true,
+    id: 'research', label: 'Research Items', group: 'Data Imports',
+    accept: '.xlsx,.xls,.csv', kind: 'generic', recordKey: LOCAL_KEYS.researchRecords, statusKey: 'lastResearchImport',
+    requiredHeaders: ['Date Found', 'Facility', 'Building', 'Floor', 'Section', 'Asset Number', 'Serial Number', 'Description', 'Issue Type', 'Status', 'Notes'],
+  },
+  {
+    id: 'facility-config', label: 'Facility Configuration', group: 'Configuration Imports',
+    accept: '.xlsx,.xls,.csv', kind: 'config', configEntity: 'facilities',
+    requiredHeaders: ['Facility ID', 'Facility Name', 'City', 'State', 'Status', 'Notes'],
+  },
+  {
+    id: 'building-config', label: 'Building Configuration', group: 'Configuration Imports',
+    accept: '.xlsx,.xls,.csv', kind: 'config', configEntity: 'buildings',
+    requiredHeaders: ['Facility ID', 'Building ID', 'Building Name', 'Status', 'Configured', 'Notes'],
+  },
+  {
+    id: 'floor-config', label: 'Floor Configuration', group: 'Configuration Imports',
+    accept: '.xlsx,.xls,.csv', kind: 'config', configEntity: 'floors',
+    requiredHeaders: ['Facility ID', 'Building ID', 'Floor ID', 'Floor Name', 'Level', 'Status', 'Notes'],
+  },
+  {
+    id: 'section-config', label: 'Section Configuration', group: 'Configuration Imports',
+    accept: '.xlsx,.xls,.csv', kind: 'config', configEntity: 'sections',
+    requiredHeaders: ['Facility ID', 'Building ID', 'Floor ID', 'Section ID', 'Section Name', 'Status', 'Completion Percent', 'Expected Assets', 'Found Assets', 'Tagged Assets', 'Last Updated', 'Notes'],
+  },
+  {
+    id: 'room-config', label: 'Room Configuration', group: 'Configuration Imports',
+    accept: '.xlsx,.xls,.csv', kind: 'config', configEntity: 'rooms',
+    requiredHeaders: ['Facility ID', 'Building ID', 'Floor ID', 'Section ID', 'Room ID', 'Room Number', 'Room Name', 'Status', 'Last Updated', 'Notes'],
   },
 ];
+
+const CONFIG_HANDLERS = {
+  facilities: {
+    preview: (rows) => previewFacilityRows(rows, getFacilities()),
+    apply: (preview) => applyFacilityImport(preview, getFacilities()),
+    key: LOCAL_KEYS.facilities,
+  },
+  buildings: {
+    preview: (rows) => previewBuildingRows(rows, getBuildings(), getFacilities()),
+    apply: (preview) => applyBuildingImport(preview, getBuildings()),
+    key: LOCAL_KEYS.buildings,
+  },
+  floors: {
+    preview: (rows) => previewFloorRows(rows, getFloors(), getBuildings()),
+    apply: (preview) => applyFloorImport(preview, getFloors()),
+    key: LOCAL_KEYS.floors,
+  },
+  sections: {
+    preview: (rows) => previewSectionConfigRows(rows, getSections(), getFloors()),
+    apply: (preview) => applySectionConfigImport(preview, getSections()),
+    key: LOCAL_KEYS.sectionProgress,
+  },
+  rooms: {
+    preview: (rows) => previewRoomRows(rows, getRooms(), getSections()),
+    apply: (preview) => applyRoomImport(preview, getRooms()),
+    key: LOCAL_KEYS.rooms,
+  },
+};
 
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -53,7 +102,7 @@ export default function ImportCenter() {
   const [selectedSheet, setSelectedSheet] = useState('');
   const [rows, setRows] = useState([]);
   const [error, setError] = useState('');
-  const [applied, setApplied] = useState(false);
+  const [applyResult, setApplyResult] = useState(null);
   const [backupStatus, setBackupStatus] = useState('');
 
   const importType = IMPORT_TYPES.find((t) => t.id === importTypeId);
@@ -65,7 +114,7 @@ export default function ImportCenter() {
     setSelectedSheet('');
     setRows([]);
     setError('');
-    setApplied(false);
+    setApplyResult(null);
   };
 
   const handleTypeChange = (id) => {
@@ -76,7 +125,7 @@ export default function ImportCenter() {
   const handleFile = async (e) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    setApplied(false);
+    setApplyResult(null);
     setError('');
     try {
       const wb = await readWorkbookFile(f);
@@ -97,7 +146,7 @@ export default function ImportCenter() {
     if (!workbook) return;
     setSelectedSheet(sheetName);
     setRows(worksheetToRows(workbook, sheetName));
-    setApplied(false);
+    setApplyResult(null);
   };
 
   // ---- Derived preview data per import type ----
@@ -109,15 +158,19 @@ export default function ImportCenter() {
 
   let assetPreview = null;
   let sectionPreview = null;
+  let configPreview = null;
 
-  if (importTypeId === 'assetworx' && rows.length > 0) {
+  if (importType.kind === 'assetworx' && rows.length > 0) {
     assetPreview = normalizeAssetRows(rows);
   }
-  if (importTypeId === 'section' && rows.length > 0) {
-    sectionPreview = previewSectionRows(rows, getSections(), floors);
+  if (importType.kind === 'section' && rows.length > 0) {
+    sectionPreview = previewSectionRows(rows, getSections(), getFloors());
+  }
+  if (importType.kind === 'config' && rows.length > 0) {
+    configPreview = CONFIG_HANDLERS[importType.configEntity].preview(rows);
   }
 
-  const genericPreview = (importTypeId === 'qc' || importTypeId === 'research') && rows.length > 0
+  const genericPreview = importType.kind === 'generic' && rows.length > 0
     ? rows.map((row) => {
         const obj = {};
         importType.requiredHeaders.forEach((h) => { obj[h] = getField(row, h); });
@@ -126,7 +179,7 @@ export default function ImportCenter() {
     : null;
 
   const handleApply = () => {
-    if (importTypeId === 'assetworx' && assetPreview) {
+    if (importType.kind === 'assetworx' && assetPreview) {
       const existing = getAssets();
       const merged = [...existing, ...assetPreview.assets];
       saveLocalData(LOCAL_KEYS.assets, merged);
@@ -137,30 +190,46 @@ export default function ImportCenter() {
         assetsMapped: mapped,
         assetsUnmapped: merged.length - mapped,
       });
-      setApplied(true);
-    } else if (importTypeId === 'section' && sectionPreview) {
-      const { sections, updatedCount } = applySectionPreview(sectionPreview, getSections());
+      setApplyResult({ message: `Imported ${assetPreview.assets.length} asset(s).` });
+    } else if (importType.kind === 'section' && sectionPreview) {
+      const { sections, updatedCount, historyEntries } = applySectionPreview(sectionPreview, getSections());
       saveLocalData(LOCAL_KEYS.sectionProgress, sections);
+      appendSectionHistory(historyEntries);
       saveImportStatus({ lastSectionImport: new Date().toISOString(), sectionsUpdated: updatedCount });
-      setApplied(true);
-    } else if (importTypeId === 'qc' && genericPreview) {
-      saveLocalData(LOCAL_KEYS.qcPreview, genericPreview);
-      setApplied(true);
-    } else if (importTypeId === 'research' && genericPreview) {
-      saveLocalData(LOCAL_KEYS.researchPreview, genericPreview);
-      setApplied(true);
+      setApplyResult({ message: `Updated ${updatedCount} section(s).` });
+    } else if (importType.kind === 'config' && configPreview) {
+      const handler = CONFIG_HANDLERS[importType.configEntity];
+      const result = handler.apply(configPreview);
+      saveLocalData(handler.key, result.data);
+      saveImportStatus({ lastConfigImport: new Date().toISOString() });
+      setApplyResult({
+        message: `Created ${result.created}, updated ${result.updated}, skipped ${result.skipped}.`,
+        errorReport: buildErrorReportRows(configPreview),
+      });
+    } else if (importType.kind === 'generic' && genericPreview) {
+      const existing = JSON.parse(window.localStorage.getItem(importType.recordKey) || '[]');
+      saveLocalData(importType.recordKey, [...existing, ...genericPreview]);
+      saveImportStatus({ [importType.statusKey]: new Date().toISOString() });
+      setApplyResult({ message: `Imported ${genericPreview.length} record(s).` });
     }
   };
 
   const handleDownloadJson = () => {
     const stamp = new Date().toISOString().slice(0, 10);
-    if (importTypeId === 'assetworx' && assetPreview) {
+    if (importType.kind === 'assetworx' && assetPreview) {
       downloadJson(assetPreview.assets, `QCOD_AssetWorx_Import_${stamp}.json`);
-    } else if (importTypeId === 'section' && sectionPreview) {
+    } else if (importType.kind === 'section' && sectionPreview) {
       downloadJson(sectionPreview, `QCOD_Section_Progress_Preview_${stamp}.json`);
+    } else if (importType.kind === 'config' && configPreview) {
+      downloadJson(configPreview, `QCOD_${importType.label.replace(/\s+/g, '_')}_Preview_${stamp}.json`);
     } else if (genericPreview) {
       downloadJson(genericPreview, `QCOD_${importType.label.replace(/\s+/g, '_')}_Preview_${stamp}.json`);
     }
+  };
+
+  const handleDownloadErrorReport = () => {
+    if (!applyResult?.errorReport) return;
+    downloadJson(applyResult.errorReport, `QCOD_${importType.label.replace(/\s+/g, '_')}_Errors_${new Date().toISOString().slice(0, 10)}.json`);
   };
 
   const handleExportBackup = () => {
@@ -198,9 +267,16 @@ export default function ImportCenter() {
         <label>
           Import type
           <select value={importTypeId} onChange={(e) => handleTypeChange(e.target.value)}>
-            {IMPORT_TYPES.map((t) => (
-              <option key={t.id} value={t.id}>{t.label}{t.previewOnly ? ' (Preview Only)' : ''}</option>
-            ))}
+            <optgroup label="Data Imports">
+              {IMPORT_TYPES.filter((t) => t.group === 'Data Imports').map((t) => (
+                <option key={t.id} value={t.id}>{t.label}</option>
+              ))}
+            </optgroup>
+            <optgroup label="Configuration Imports">
+              {IMPORT_TYPES.filter((t) => t.group === 'Configuration Imports').map((t) => (
+                <option key={t.id} value={t.id}>{t.label}</option>
+              ))}
+            </optgroup>
           </select>
         </label>
 
@@ -209,12 +285,6 @@ export default function ImportCenter() {
           <input type="file" accept={importType.accept} onChange={handleFile} />
         </label>
       </div>
-
-      {importType.previewOnly && (
-        <p className="empty-note">
-          {importType.label} is Preview Only until this module is approved — values are not applied to dashboard calculations.
-        </p>
-      )}
 
       {error && <p className="empty-note import-error">{error}</p>}
 
@@ -268,6 +338,15 @@ export default function ImportCenter() {
             </dl>
           )}
 
+          {configPreview && (
+            <dl className="asset-dl">
+              <div><dt>Rows read</dt><dd>{configPreview.length}</dd></div>
+              <div><dt>Will create</dt><dd>{configPreview.filter((p) => p.action === 'create').length}</dd></div>
+              <div><dt>Will update</dt><dd>{configPreview.filter((p) => p.action === 'update').length}</dd></div>
+              <div><dt>Will skip (invalid)</dt><dd>{configPreview.filter((p) => p.action === 'skip').length}</dd></div>
+            </dl>
+          )}
+
           <h3 className="import-subheading">Import Preview</h3>
           <div className="table-wrap">
             <table>
@@ -275,6 +354,8 @@ export default function ImportCenter() {
                 <tr>
                   {importType.requiredHeaders.map((h) => <th key={h}>{h}</th>)}
                   {sectionPreview && <th>Match Status</th>}
+                  {configPreview && <th>Action</th>}
+                  {configPreview && <th>Errors / Warnings</th>}
                 </tr>
               </thead>
               <tbody>
@@ -290,6 +371,21 @@ export default function ImportCenter() {
                           : <span className="import-error">{sectionPreview[i]?.reason}</span>}
                       </td>
                     )}
+                    {configPreview && (
+                      <td className={configPreview[i]?.action === 'skip' ? 'import-error' : ''}>
+                        {configPreview[i]?.action}
+                      </td>
+                    )}
+                    {configPreview && (
+                      <td>
+                        {configPreview[i]?.errors?.length > 0 && (
+                          <span className="import-error">{configPreview[i].errors.join('; ')}</span>
+                        )}
+                        {configPreview[i]?.warnings?.length > 0 && (
+                          <span className="empty-note"> {configPreview[i].warnings.join('; ')}</span>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -302,9 +398,12 @@ export default function ImportCenter() {
           <div className="import-actions">
             <button className="btn-primary" onClick={handleApply}>Apply Import</button>
             <button className="btn-secondary" onClick={handleDownloadJson}>Download Normalized JSON</button>
+            {applyResult?.errorReport?.length > 0 && (
+              <button className="btn-secondary" onClick={handleDownloadErrorReport}>Download Error Report</button>
+            )}
             <button className="btn-secondary" onClick={reset}>Clear</button>
           </div>
-          {applied && <p className="import-success">Import applied to this browser's local data.</p>}
+          {applyResult && <p className="import-success">{applyResult.message}</p>}
         </>
       )}
 

@@ -1,6 +1,7 @@
 import {
   getImportStatus, getValidAssets, getMappedAssets, getUnmappedAssets,
-  getQcPreview, getResearchPreview,
+  getQcRecords, getResearchRecords, getFacilities, getBuildings, getFloors,
+  getSections, getRooms, getConfiguredBuildings,
 } from '../lib/data';
 
 function fmtTimestamp(value) {
@@ -16,13 +17,19 @@ export default function DataStatus() {
   const unmapped = getUnmappedAssets();
 
   const rows = [
+    ['Facilities Configured', getFacilities().length],
+    ['Buildings Configured', getConfiguredBuildings().length],
+    ['Floors Configured', getFloors().length],
+    ['Sections Configured', getSections().length],
+    ['Rooms Configured', getRooms().length],
     ['Assets Imported', validAssets.length],
     ['Mapped Assets', mapped.length],
     ['Unmapped Assets', unmapped.length],
-    ['QC Rows Previewed', getQcPreview().length],
-    ['Research Rows Previewed', getResearchPreview().length],
+    ['QC Records', getQcRecords().length],
+    ['Research Records', getResearchRecords().length],
     ['Last Asset Import', fmtTimestamp(importStatus.lastAssetImport)],
     ['Last Section Import', fmtTimestamp(importStatus.lastSectionImport)],
+    ['Last Configuration Import', fmtTimestamp(importStatus.lastConfigImport)],
     ['Last Backup Export', fmtTimestamp(importStatus.lastBackupExport)],
   ];
 

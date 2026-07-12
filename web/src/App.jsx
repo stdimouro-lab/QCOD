@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
-  project, buildings, statuses,
+  project, statuses, getBuildings, getFacilities,
   getBuilding, getFloorsForBuilding, getSectionsForBuilding, getOutstandingSections,
   onDataChanged,
 } from './lib/data';
@@ -8,11 +8,17 @@ import StatCards from './components/StatCards';
 import FloorProgress from './components/FloorProgress';
 import SectionTable from './components/SectionTable';
 import BuildingSelector from './components/BuildingSelector';
+import FacilitySelector from './components/FacilitySelector';
 import BuildingCards from './components/BuildingCards';
+import RoomTable from './components/RoomTable';
+import AssetMapping from './components/AssetMapping';
+import QcCenter from './components/QcCenter';
+import ResearchCenter from './components/ResearchCenter';
 import ProjectInfo from './components/ProjectInfo';
 import DataStatus from './components/DataStatus';
 import ImportCenter from './components/ImportCenter';
 import ReportCenter from './components/ReportCenter';
+import ConfigurationCenter from './components/ConfigurationCenter';
 import { StatusDot } from './lib/status';
 
 const TABS = [
@@ -20,13 +26,22 @@ const TABS = [
   { id: 'buildings', label: 'Buildings' },
   { id: 'floors', label: 'Floors' },
   { id: 'sections', label: 'Sections' },
+  { id: 'rooms', label: 'Rooms' },
+  { id: 'mapping', label: 'Asset Mapping' },
+  { id: 'qc', label: 'QC' },
+  { id: 'research', label: 'Research' },
   { id: 'outstanding', label: 'Outstanding Work' },
   { id: 'imports', label: 'Imports' },
   { id: 'reports', label: 'Reports' },
+  { id: 'configuration', label: 'Configuration' },
 ];
+
+const FACILITY_SCOPED_TABS = new Set(['buildings', 'floors', 'sections', 'rooms', 'outstanding']);
+const BUILDING_SELECTOR_TABS = new Set(['floors', 'sections']);
 
 export default function App() {
   const [tab, setTab] = useState('overview');
+  const [selectedFacilityId, setSelectedFacilityId] = useState(getFacilities()[0]?.id || 'martinsburg-va');
   const [selectedBuildingId, setSelectedBuildingId] = useState(project.focusBuilding || '500');
   // Bumped whenever an import/backup/clear writes to localStorage, so every
   // getSections()/getAssets() call below re-reads fresh data on re-render —
@@ -43,6 +58,12 @@ export default function App() {
   const noAccess = outstanding.filter((s) => s.status === 'no_access');
 
   const handleSelectBuilding = (id) => setSelectedBuildingId(id);
+  const handleSelectFacility = (id) => {
+    setSelectedFacilityId(id);
+    // A building from the old facility is meaningless once the facility changes.
+    const firstBuildingInFacility = getBuildings().find((b) => b.facilityId === id);
+    setSelectedBuildingId(firstBuildingInFacility?.id || '');
+  };
 
   return (
     <div className="app">
@@ -82,8 +103,13 @@ export default function App() {
         ))}
       </nav>
 
-      {tab !== 'overview' && tab !== 'buildings' && tab !== 'imports' && tab !== 'reports' && (
-        <BuildingSelector selectedId={selectedBuildingId} onChange={handleSelectBuilding} />
+      {FACILITY_SCOPED_TABS.has(tab) && (
+        <div className="selector-row">
+          <FacilitySelector selectedId={selectedFacilityId} onChange={handleSelectFacility} />
+          {BUILDING_SELECTOR_TABS.has(tab) && (
+            <BuildingSelector selectedId={selectedBuildingId} onChange={handleSelectBuilding} facilityId={selectedFacilityId} />
+          )}
+        </div>
       )}
 
       <main>
@@ -96,7 +122,10 @@ export default function App() {
         )}
 
         {tab === 'buildings' && (
-          <BuildingCards buildings={buildings} onSelect={handleSelectBuilding} />
+          <BuildingCards
+            buildings={getBuildings().filter((b) => b.facilityId === selectedFacilityId)}
+            onSelect={handleSelectBuilding}
+          />
         )}
 
         {tab === 'floors' && (
@@ -113,6 +142,14 @@ export default function App() {
             </section>
           )
         )}
+
+        {tab === 'rooms' && <RoomTable facilityId={selectedFacilityId} />}
+
+        {tab === 'mapping' && <AssetMapping />}
+
+        {tab === 'qc' && <QcCenter />}
+
+        {tab === 'research' && <ResearchCenter />}
 
         {tab === 'outstanding' && (
           <>
@@ -131,7 +168,9 @@ export default function App() {
 
         {tab === 'imports' && <ImportCenter />}
 
-        {tab === 'reports' && <ReportCenter />}
+        {tab === 'reports' && <ReportCenter defaultFacilityId={selectedFacilityId} />}
+
+        {tab === 'configuration' && <ConfigurationCenter />}
       </main>
 
       <footer className="footer">

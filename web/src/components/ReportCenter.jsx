@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react';
 import {
-  buildings, floors, statuses, project,
+  statuses, project, getBuildings, getFloors, getFacilities, getRooms,
   getSections, getFloorsForBuilding, getSectionsForBuilding,
   getSectionsForFloor, getOutstandingSections, getBuildingTotals, getCampusSummary,
   getProjectTotals, pct, getValidAssets, getAssetIssueCounts, getImportStatus,
+  getMappingHistory, getSectionHistory, getQcRecords, getResearchRecords,
 } from '../lib/data';
 import { exportReportToExcel } from '../lib/exportExcel';
 import { exportReportToPdf } from '../lib/exportPdf';
@@ -18,6 +19,16 @@ const REPORTS = [
   { id: 'assetInventory', label: 'Asset Inventory', filters: ['building', 'startDate', 'endDate'] },
   { id: 'assetIssues', label: 'Asset Issues', filters: ['building'] },
   { id: 'importStatus', label: 'Import Status', filters: [] },
+  { id: 'facilityConfig', label: 'Facility Configuration', filters: [] },
+  { id: 'buildingConfig', label: 'Building Configuration', filters: ['status'] },
+  { id: 'floorConfig', label: 'Floor Configuration', filters: ['building', 'status'] },
+  { id: 'sectionConfig', label: 'Section Configuration', filters: ['building', 'floor', 'status'] },
+  { id: 'roomConfig', label: 'Room Configuration', filters: ['building', 'floor', 'section', 'status'] },
+  { id: 'assetMapping', label: 'Asset Mapping', filters: ['building'] },
+  { id: 'mappingHistory', label: 'Mapping History', filters: ['startDate', 'endDate'] },
+  { id: 'sectionHistory', label: 'Section History', filters: ['startDate', 'endDate'] },
+  { id: 'qcRecords', label: 'QC Records', filters: ['building', 'startDate', 'endDate'] },
+  { id: 'researchRecords', label: 'Research Records', filters: ['building', 'startDate', 'endDate'] },
 ];
 
 function statusLabel(key) {
@@ -33,6 +44,8 @@ function inDateRange(dateStr, start, end) {
 
 function buildReport(reportId, filters) {
   const sections = getSections();
+  const buildings = getBuildings();
+  const floors = getFloors();
 
   switch (reportId) {
     case 'executive': {
@@ -233,6 +246,7 @@ function buildReport(reportId, filters) {
       const rows = [
         { field: 'Last Asset Import', value: s.lastAssetImport || 'Not Imported' },
         { field: 'Last Section Import', value: s.lastSectionImport || 'Not Imported' },
+        { field: 'Last Configuration Import', value: s.lastConfigImport || 'Not Imported' },
         { field: 'Last Backup Export', value: s.lastBackupExport || 'Not Imported' },
         { field: 'Assets Imported', value: s.assetsImported || 0 },
         { field: 'Assets Mapped', value: s.assetsMapped || 0 },
@@ -242,18 +256,143 @@ function buildReport(reportId, filters) {
       return { columns, rows, summaryLines: [], emptyMessage: null };
     }
 
+    case 'facilityConfig': {
+      const rows = getFacilities().map((f) => ({ id: f.id, name: f.name, city: f.city, state: f.state, status: statusLabel(f.status), notes: f.notes || '' }));
+      const columns = [
+        { header: 'Facility ID', key: 'id' }, { header: 'Name', key: 'name' }, { header: 'City', key: 'city' },
+        { header: 'State', key: 'state' }, { header: 'Status', key: 'status' }, { header: 'Notes', key: 'notes' },
+      ];
+      return { columns, rows, summaryLines: [], emptyMessage: 'No facilities configured.' };
+    }
+
+    case 'buildingConfig': {
+      let rows = buildings;
+      if (filters.status) rows = rows.filter((b) => b.status === filters.status);
+      const mapped = rows.map((b) => ({ id: b.id, facilityId: b.facilityId, name: b.name, status: statusLabel(b.status), configured: b.configured ? 'Yes' : 'No', notes: b.notes || '' }));
+      const columns = [
+        { header: 'Building ID', key: 'id' }, { header: 'Facility', key: 'facilityId' }, { header: 'Name', key: 'name' },
+        { header: 'Status', key: 'status' }, { header: 'Configured', key: 'configured' }, { header: 'Notes', key: 'notes' },
+      ];
+      return { columns, rows: mapped, summaryLines: [], emptyMessage: 'No buildings matched the selected filters.' };
+    }
+
+    case 'floorConfig': {
+      let rows = filters.building ? getFloorsForBuilding(filters.building) : floors;
+      if (filters.status) rows = rows.filter((f) => f.status === filters.status);
+      const mapped = rows.map((f) => ({ id: f.id, buildingId: f.buildingId, name: f.name, level: f.level, status: statusLabel(f.status), notes: f.notes || f.mapNotes || '' }));
+      const columns = [
+        { header: 'Floor ID', key: 'id' }, { header: 'Building', key: 'buildingId' }, { header: 'Name', key: 'name' },
+        { header: 'Level', key: 'level' }, { header: 'Status', key: 'status' }, { header: 'Notes', key: 'notes' },
+      ];
+      return { columns, rows: mapped, summaryLines: [], emptyMessage: 'No floors matched the selected filters.' };
+    }
+
+    case 'sectionConfig': {
+      let rows = sections;
+      if (filters.building) rows = rows.filter((s) => s.buildingId === filters.building);
+      if (filters.floor) rows = rows.filter((s) => s.floorId === filters.floor);
+      if (filters.status) rows = rows.filter((s) => s.status === filters.status);
+      const mapped = rows.map((s) => ({ id: s.id, buildingId: s.buildingId, floorId: s.floorId, name: s.name, status: statusLabel(s.status), completionPct: `${s.completionPct || 0}%`, lastUpdate: s.lastUpdate || 'Not Updated' }));
+      const columns = [
+        { header: 'Section ID', key: 'id' }, { header: 'Building', key: 'buildingId' }, { header: 'Floor', key: 'floorId' },
+        { header: 'Name', key: 'name' }, { header: 'Status', key: 'status' }, { header: 'Completion', key: 'completionPct' },
+        { header: 'Last Updated', key: 'lastUpdate' },
+      ];
+      return { columns, rows: mapped, summaryLines: [], emptyMessage: 'No sections matched the selected filters.' };
+    }
+
+    case 'roomConfig': {
+      let rows = getRooms();
+      if (filters.building) rows = rows.filter((r) => r.buildingId === filters.building);
+      if (filters.floor) rows = rows.filter((r) => r.floorId === filters.floor);
+      if (filters.section) rows = rows.filter((r) => r.sectionId === filters.section);
+      if (filters.status) rows = rows.filter((r) => r.status === filters.status);
+      const mapped = rows.map((r) => ({ id: r.id, buildingId: r.buildingId, floorId: r.floorId, sectionId: r.sectionId, roomNumber: r.roomNumber, name: r.name, status: statusLabel(r.status), lastUpdate: r.lastUpdate || 'Not Updated' }));
+      const columns = [
+        { header: 'Room ID', key: 'id' }, { header: 'Building', key: 'buildingId' }, { header: 'Floor', key: 'floorId' },
+        { header: 'Section', key: 'sectionId' }, { header: 'Room Number', key: 'roomNumber' }, { header: 'Name', key: 'name' },
+        { header: 'Status', key: 'status' }, { header: 'Last Updated', key: 'lastUpdate' },
+      ];
+      return { columns, rows: mapped, summaryLines: [], emptyMessage: 'No room data has been configured for this selection.' };
+    }
+
+    case 'assetMapping': {
+      let assets = getValidAssets().filter((a) => a.buildingId);
+      if (filters.building) assets = assets.filter((a) => a.buildingId === filters.building);
+      const rows = assets.map((a) => ({ assetNumber: a.assetNumber, buildingId: a.buildingId, floorId: a.floorId || 'Unmapped', sectionId: a.sectionId || 'Unmapped', roomId: a.roomId || 'Unmapped', locationName: a.locationName }));
+      const columns = [
+        { header: 'Asset Number', key: 'assetNumber' }, { header: 'Building', key: 'buildingId' }, { header: 'Floor', key: 'floorId' },
+        { header: 'Section', key: 'sectionId' }, { header: 'Room', key: 'roomId' }, { header: 'Location Name', key: 'locationName' },
+      ];
+      return { columns, rows, summaryLines: [`Mapped assets: ${rows.length}`], emptyMessage: 'No assets have been mapped yet.' };
+    }
+
+    case 'mappingHistory': {
+      let history = getMappingHistory();
+      if (filters.startDate) history = history.filter((h) => h.mappedAt >= filters.startDate);
+      if (filters.endDate) history = history.filter((h) => h.mappedAt <= filters.endDate + 'T23:59:59');
+      const rows = history.map((h) => ({
+        date: new Date(h.mappedAt).toLocaleString(), assetNumber: h.assetNumber,
+        previous: [h.previousMapping.buildingId, h.previousMapping.floorId, h.previousMapping.sectionId, h.previousMapping.roomId].filter(Boolean).join(' / ') || 'None',
+        newMapping: [h.newMapping.buildingId, h.newMapping.floorId, h.newMapping.sectionId, h.newMapping.roomId].filter(Boolean).join(' / ') || 'None',
+        source: h.source,
+      }));
+      const columns = [
+        { header: 'Date', key: 'date' }, { header: 'Asset Number', key: 'assetNumber' },
+        { header: 'Previous Mapping', key: 'previous' }, { header: 'New Mapping', key: 'newMapping' }, { header: 'Source', key: 'source' },
+      ];
+      return { columns, rows, summaryLines: [], emptyMessage: 'No mapping changes recorded yet.' };
+    }
+
+    case 'sectionHistory': {
+      let history = getSectionHistory();
+      if (filters.startDate) history = history.filter((h) => h.updatedAt >= filters.startDate);
+      if (filters.endDate) history = history.filter((h) => h.updatedAt <= filters.endDate + 'T23:59:59');
+      const rows = history.map((h) => ({
+        date: new Date(h.updatedAt).toLocaleString(), sectionId: h.sectionId,
+        previousStatus: statusLabel(h.previousStatus), newStatus: statusLabel(h.newStatus),
+        previousPct: `${h.previousCompletionPct}%`, newPct: `${h.newCompletionPct}%`, note: h.note || '',
+      }));
+      const columns = [
+        { header: 'Date', key: 'date' }, { header: 'Section', key: 'sectionId' }, { header: 'Previous Status', key: 'previousStatus' },
+        { header: 'New Status', key: 'newStatus' }, { header: 'Previous %', key: 'previousPct' }, { header: 'New %', key: 'newPct' }, { header: 'Note', key: 'note' },
+      ];
+      return { columns, rows, summaryLines: [], emptyMessage: 'No section status changes recorded yet.' };
+    }
+
+    case 'qcRecords': {
+      let rows = getQcRecords();
+      if (filters.building) rows = rows.filter((r) => r['Building'] === filters.building);
+      if (filters.startDate) rows = rows.filter((r) => (r['Date'] || '') >= filters.startDate);
+      if (filters.endDate) rows = rows.filter((r) => (r['Date'] || '') <= filters.endDate);
+      const columns = ['Date', 'Facility', 'Building', 'Floor', 'Section', 'Department Area', 'Tag Location', 'Equipment Description', 'EE Tag Number', 'Serial Number', 'QC Status', 'Notes']
+        .map((h) => ({ header: h, key: h }));
+      return { columns, rows, summaryLines: [], emptyMessage: 'No QC records have been imported yet.' };
+    }
+
+    case 'researchRecords': {
+      let rows = getResearchRecords();
+      if (filters.building) rows = rows.filter((r) => r['Building'] === filters.building);
+      if (filters.startDate) rows = rows.filter((r) => (r['Date Found'] || '') >= filters.startDate);
+      if (filters.endDate) rows = rows.filter((r) => (r['Date Found'] || '') <= filters.endDate);
+      const columns = ['Date Found', 'Facility', 'Building', 'Floor', 'Section', 'Asset Number', 'Serial Number', 'Description', 'Issue Type', 'Status', 'Notes']
+        .map((h) => ({ header: h, key: h }));
+      return { columns, rows, summaryLines: [], emptyMessage: 'No Research records have been imported yet.' };
+    }
+
     default:
       return { columns: [], rows: [], summaryLines: [], emptyMessage: 'Unknown report.' };
   }
 }
 
-export default function ReportCenter() {
+export default function ReportCenter({ defaultFacilityId }) {
   const [reportId, setReportId] = useState('executive');
   const [filters, setFilters] = useState({});
 
+  const buildings = getBuildings().filter((b) => !defaultFacilityId || b.facilityId === defaultFacilityId);
   const report = REPORTS.find((r) => r.id === reportId);
   const buildingId = filters.building || '';
-  const scopedFloors = buildingId ? getFloorsForBuilding(buildingId) : floors;
+  const scopedFloors = buildingId ? getFloorsForBuilding(buildingId) : getFloors();
   const scopedSections = buildingId ? getSectionsForBuilding(buildingId) : getSections();
 
   const { columns, rows, summaryLines, emptyMessage } = useMemo(

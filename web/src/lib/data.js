@@ -1,14 +1,14 @@
 import project from '../../../data/project.json';
-import facilities from '../../../data/facilities.json';
-import buildings from '../../../data/buildings.json';
-import floors from '../../../data/floors.json';
+import bundledFacilities from '../../../data/facilities.json';
+import bundledBuildings from '../../../data/buildings.json';
+import bundledFloors from '../../../data/floors.json';
 import bundledSections from '../../../data/sections.json';
-import rooms from '../../../data/rooms.json';
+import bundledRooms from '../../../data/rooms.json';
 import bundledAssets from '../../../data/assets.json';
 import statuses from '../../../data/statuses.json';
 import bundledImportStatus from '../../../data/import-status.json';
 
-export { project, facilities, buildings, floors, rooms, statuses };
+export { project, statuses };
 
 // ---- Local persistence ----
 // QCOD is local-only: imported data lives in this browser's localStorage and
@@ -17,10 +17,19 @@ export { project, facilities, buildings, floors, rooms, statuses };
 // fallback, so the app still works the first time it's opened.
 
 export const LOCAL_KEYS = {
+  facilities: 'qcod-facilities',
+  buildings: 'qcod-buildings',
+  floors: 'qcod-floors',
+  rooms: 'qcod-rooms',
   assets: 'qcod-assets',
   sectionProgress: 'qcod-section-progress',
   qcPreview: 'qcod-qc-preview',
   researchPreview: 'qcod-research-preview',
+  qcRecords: 'qcod-qc-records',
+  researchRecords: 'qcod-research-records',
+  locationMappings: 'qcod-location-mappings',
+  mappingHistory: 'qcod-mapping-history',
+  sectionHistory: 'qcod-section-history',
   importStatus: 'qcod-import-status',
 };
 
@@ -61,6 +70,22 @@ export function onDataChanged(handler) {
 // These always check localStorage first. Call these instead of importing
 // the bundled JSON directly anywhere the data can be changed by an import.
 
+export function getFacilities() {
+  return loadLocalData(LOCAL_KEYS.facilities, bundledFacilities);
+}
+
+export function getBuildings() {
+  return loadLocalData(LOCAL_KEYS.buildings, bundledBuildings);
+}
+
+export function getFloors() {
+  return loadLocalData(LOCAL_KEYS.floors, bundledFloors);
+}
+
+export function getRooms() {
+  return loadLocalData(LOCAL_KEYS.rooms, bundledRooms);
+}
+
 export function getSections() {
   return loadLocalData(LOCAL_KEYS.sectionProgress, bundledSections);
 }
@@ -86,20 +111,89 @@ export function getResearchPreview() {
   return loadLocalData(LOCAL_KEYS.researchPreview, []);
 }
 
+export function getQcRecords() {
+  return loadLocalData(LOCAL_KEYS.qcRecords, []);
+}
+
+export function getResearchRecords() {
+  return loadLocalData(LOCAL_KEYS.researchRecords, []);
+}
+
+export function getLocationMappings() {
+  return loadLocalData(LOCAL_KEYS.locationMappings, []);
+}
+
+export function getMappingHistory() {
+  return loadLocalData(LOCAL_KEYS.mappingHistory, []);
+}
+
+export function getSectionHistory() {
+  return loadLocalData(LOCAL_KEYS.sectionHistory, []);
+}
+
+// Appends new entries to section history — never overwrites what's there.
+export function appendSectionHistory(entries) {
+  if (!entries || entries.length === 0) return;
+  const current = getSectionHistory();
+  saveLocalData(LOCAL_KEYS.sectionHistory, [...current, ...entries]);
+}
+
+export function getSectionHistoryForSection(sectionId) {
+  return getSectionHistory().filter((h) => h.sectionId === sectionId);
+}
+
 // ---- Backup / restore ----
+// v0.2 backup covers the full site hierarchy plus mapping/history data.
+// Import validates the shape before writing anything — a malformed backup
+// is rejected outright rather than partially overwriting good local data.
+
+const BACKUP_ARRAY_FIELDS = [
+  'facilities', 'buildings', 'floors', 'sections', 'rooms', 'assets',
+  'assetMappings', 'locationMappings', 'mappingHistory', 'sectionHistory',
+  'qcRecords', 'researchRecords',
+];
 
 export function exportQcodBackup() {
   const backup = {
-    version: '0.1',
+    version: '0.2',
     exportedAt: new Date().toISOString(),
+    facilities: getFacilities(),
+    buildings: getBuildings(),
+    floors: getFloors(),
+    sections: getSections(),
+    rooms: getRooms(),
     assets: getAssets(),
-    sectionProgress: getSections(),
-    qcPreview: getQcPreview(),
-    researchPreview: getResearchPreview(),
+    assetMappings: [], // reserved: per-asset mapping snapshot, tracked via mappingHistory today
+    locationMappings: getLocationMappings(),
+    mappingHistory: getMappingHistory(),
+    sectionHistory: getSectionHistory(),
+    qcRecords: getQcRecords(),
+    researchRecords: getResearchRecords(),
     importStatus: getImportStatus(),
   };
   saveImportStatus({ lastBackupExport: backup.exportedAt });
   return backup;
+}
+
+// Confirms a parsed object looks like a real QCOD backup before anything
+// gets written to localStorage. Every array field must actually be an
+// array (or simply absent) — a backup with the wrong shape is rejected
+// wholesale rather than applied field-by-field.
+export function validateBackupShape(backup) {
+  const errors = [];
+  if (!backup || typeof backup !== 'object') {
+    return { valid: false, errors: ['File is not a valid JSON object.'] };
+  }
+  if (!backup.version) errors.push('Missing "version" field.');
+  BACKUP_ARRAY_FIELDS.forEach((field) => {
+    if (field in backup && !Array.isArray(backup[field])) {
+      errors.push(`Field "${field}" must be an array.`);
+    }
+  });
+  if ('importStatus' in backup && (typeof backup.importStatus !== 'object' || backup.importStatus === null || Array.isArray(backup.importStatus))) {
+    errors.push('Field "importStatus" must be an object.');
+  }
+  return { valid: errors.length === 0, errors };
 }
 
 export function importQcodBackup(file) {
@@ -108,9 +202,23 @@ export function importQcodBackup(file) {
     reader.onload = (e) => {
       try {
         const backup = JSON.parse(e.target.result);
-        if (!backup || typeof backup !== 'object') throw new Error('Not a valid QCOD backup file.');
+        const { valid, errors } = validateBackupShape(backup);
+        if (!valid) {
+          reject(new Error(`Backup file rejected — ${errors.join(' ')}`));
+          return;
+        }
+        if (Array.isArray(backup.facilities)) saveLocalData(LOCAL_KEYS.facilities, backup.facilities);
+        if (Array.isArray(backup.buildings)) saveLocalData(LOCAL_KEYS.buildings, backup.buildings);
+        if (Array.isArray(backup.floors)) saveLocalData(LOCAL_KEYS.floors, backup.floors);
+        if (Array.isArray(backup.sections)) saveLocalData(LOCAL_KEYS.sectionProgress, backup.sections);
+        else if (Array.isArray(backup.sectionProgress)) saveLocalData(LOCAL_KEYS.sectionProgress, backup.sectionProgress); // v0.1 compatibility
+        if (Array.isArray(backup.rooms)) saveLocalData(LOCAL_KEYS.rooms, backup.rooms);
         if (Array.isArray(backup.assets)) saveLocalData(LOCAL_KEYS.assets, backup.assets);
-        if (Array.isArray(backup.sectionProgress)) saveLocalData(LOCAL_KEYS.sectionProgress, backup.sectionProgress);
+        if (Array.isArray(backup.locationMappings)) saveLocalData(LOCAL_KEYS.locationMappings, backup.locationMappings);
+        if (Array.isArray(backup.mappingHistory)) saveLocalData(LOCAL_KEYS.mappingHistory, backup.mappingHistory);
+        if (Array.isArray(backup.sectionHistory)) saveLocalData(LOCAL_KEYS.sectionHistory, backup.sectionHistory);
+        if (Array.isArray(backup.qcRecords)) saveLocalData(LOCAL_KEYS.qcRecords, backup.qcRecords);
+        if (Array.isArray(backup.researchRecords)) saveLocalData(LOCAL_KEYS.researchRecords, backup.researchRecords);
         if (Array.isArray(backup.qcPreview)) saveLocalData(LOCAL_KEYS.qcPreview, backup.qcPreview);
         if (Array.isArray(backup.researchPreview)) saveLocalData(LOCAL_KEYS.researchPreview, backup.researchPreview);
         if (backup.importStatus) saveLocalData(LOCAL_KEYS.importStatus, backup.importStatus);
@@ -143,24 +251,20 @@ export function fmtPct(value) {
 
 // ---- Facility / building / floor / section lookups ----
 
-export function getFacilities() {
-  return facilities;
-}
-
 export function getBuildingsForFacility(facilityId) {
-  return buildings.filter((b) => b.facilityId === facilityId);
+  return getBuildings().filter((b) => b.facilityId === facilityId);
 }
 
 export function getConfiguredBuildings() {
-  return buildings.filter((b) => b.configured);
+  return getBuildings().filter((b) => b.configured);
 }
 
 export function getBuilding(buildingId) {
-  return buildings.find((b) => b.id === buildingId);
+  return getBuildings().find((b) => b.id === buildingId);
 }
 
 export function getFloorsForBuilding(buildingId) {
-  return floors.filter((f) => f.buildingId === buildingId);
+  return getFloors().filter((f) => f.buildingId === buildingId);
 }
 
 export function getSectionsForBuilding(buildingId) {
@@ -172,7 +276,7 @@ export function getSectionsForFloor(floorId) {
 }
 
 export function getRoomsForSection(sectionId) {
-  return rooms.filter((r) => r.sectionId === sectionId);
+  return getRooms().filter((r) => r.sectionId === sectionId);
 }
 
 export function getAssetsForBuilding(buildingId) {
@@ -188,7 +292,7 @@ export function getAssetsForSection(sectionId) {
 }
 
 export function getFloorName(floorId) {
-  return floors.find((f) => f.id === floorId)?.name ?? floorId;
+  return getFloors().find((f) => f.id === floorId)?.name ?? floorId;
 }
 
 // ---- Aggregate totals ----
@@ -231,7 +335,7 @@ export function getBuildingTotals(buildingId) {
 }
 
 export function getFloorTotals(floorId) {
-  const floor = floors.find((f) => f.id === floorId);
+  const floor = getFloors().find((f) => f.id === floorId);
   const floorSections = getSectionsForFloor(floorId);
   const mappedTagged = getAssetCountForFloor(floorId);
   return {
@@ -259,10 +363,11 @@ export function getOutstandingSections(sectionList = getSections()) {
 
 export function getCampusSummary() {
   const sections = getSections();
+  const buildings = getBuildings();
   const buildingsConfigured = getConfiguredBuildings().length;
   const buildingsInProgress = buildings.filter((b) => b.status === 'in_progress').length;
   const buildingsComplete = buildings.filter((b) => b.status === 'completed').length;
-  const floorsConfigured = floors.length;
+  const floorsConfigured = getFloors().length;
   const sectionsConfigured = sections.length;
   const statusCounts = getStatusCounts(sections);
   return {
@@ -318,4 +423,106 @@ export function getAssetCountForFloor(floorId) {
 
 export function getAssetCountForSection(sectionId) {
   return getMappedAssets().filter((a) => a.sectionId === sectionId).length;
+}
+
+// ---- Asset mapping ----
+// Assigns imported assets to a Facility/Building/Floor/Section/Room. This is
+// always an explicit human action — nothing here ever runs automatically.
+// Every application is written to qcod-mapping-history and history is never
+// overwritten, only appended to, so there's a full audit trail of who/what
+// changed an asset's location over time.
+
+function normalizeLocationName(loc) {
+  return (loc ?? '').toString().trim().toLowerCase();
+}
+
+function mappingFieldsFor(entity) {
+  return {
+    facilityId: entity?.facilityId || '',
+    buildingId: entity?.buildingId || '',
+    floorId: entity?.floorId || '',
+    sectionId: entity?.sectionId || '',
+    roomId: entity?.roomId || '',
+  };
+}
+
+// Groups unmapped assets by identical normalized Location Name and surfaces
+// any prior approved mapping for that same name — a suggestion only. The
+// caller must still call approveLocationMapping/applyAssetMappings
+// explicitly; nothing here writes any data.
+export function getLocationMappingSuggestions() {
+  const unmapped = getUnmappedAssets();
+  const groups = {};
+  unmapped.forEach((a) => {
+    const key = normalizeLocationName(a.locationName);
+    if (!key) return;
+    if (!groups[key]) {
+      groups[key] = { locationNameNormalized: key, locationNameSample: a.locationName, count: 0, assetNumbers: [] };
+    }
+    groups[key].count += 1;
+    groups[key].assetNumbers.push(a.assetNumber);
+  });
+  const approved = getLocationMappings();
+  return Object.values(groups).map((g) => ({
+    ...g,
+    priorApprovedMapping: approved.find((m) => m.locationNameNormalized === g.locationNameNormalized) || null,
+  }));
+}
+
+// Records an approved Location Name -> hierarchy mapping for future
+// suggestions. This does not touch any asset by itself.
+export function approveLocationMapping(locationNameRaw, mapping) {
+  const locationNameNormalized = normalizeLocationName(locationNameRaw);
+  const existing = getLocationMappings().filter((m) => m.locationNameNormalized !== locationNameNormalized);
+  const entry = {
+    locationNameNormalized,
+    ...mappingFieldsFor(mapping),
+    approvedAt: new Date().toISOString(),
+  };
+  saveLocalData(LOCAL_KEYS.locationMappings, [...existing, entry]);
+  return entry;
+}
+
+// Applies a Facility/Building/Floor/Section/Room mapping to one or more
+// assets (by assetNumber). Blank fields in `mapping` leave the asset's
+// existing value untouched unless `force` is set (used by Clear Mapping,
+// which intentionally blanks every field). Every change appends a record
+// to mapping history — history is never overwritten.
+export function applyAssetMappings(assetNumbers, mapping, source = 'manual', { force = false } = {}) {
+  const assets = getAssets();
+  const history = getMappingHistory();
+  const newHistoryEntries = [];
+
+  const updated = assets.map((a) => {
+    if (!assetNumbers.includes(a.assetNumber)) return a;
+    const previousMapping = mappingFieldsFor(a);
+    const newMapping = force
+      ? mappingFieldsFor(mapping)
+      : {
+          facilityId: mapping.facilityId || previousMapping.facilityId,
+          buildingId: mapping.buildingId || previousMapping.buildingId,
+          floorId: mapping.floorId || previousMapping.floorId,
+          sectionId: mapping.sectionId || previousMapping.sectionId,
+          roomId: mapping.roomId || previousMapping.roomId,
+        };
+
+    newHistoryEntries.push({
+      id: `${a.assetNumber || 'asset'}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      assetNumber: a.assetNumber,
+      previousMapping,
+      newMapping,
+      mappedAt: new Date().toISOString(),
+      source,
+    });
+
+    return { ...a, ...newMapping };
+  });
+
+  saveLocalData(LOCAL_KEYS.assets, updated);
+  saveLocalData(LOCAL_KEYS.mappingHistory, [...history, ...newHistoryEntries]);
+  return { updatedCount: newHistoryEntries.length };
+}
+
+export function clearAssetMapping(assetNumbers, source = 'manual') {
+  return applyAssetMappings(assetNumbers, {}, source, { force: true });
 }

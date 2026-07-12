@@ -1,9 +1,10 @@
-import { project, getConfiguredBuildings, floors, getSections } from '../lib/data';
+import { project, getConfiguredBuildings, getFloors, getSections } from '../lib/data';
 
 export default function ProjectInfo() {
   const configured = getConfiguredBuildings();
   const configuredNames = configured.map((b) => `${b.id} — ${b.name}`).join(', ') || 'None';
   const sections = getSections();
+  const floors = getFloors();
 
   const rows = [
     ['Facility', project.facility],
