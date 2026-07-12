@@ -30,6 +30,9 @@ export const LOCAL_KEYS = {
   locationMappings: 'qcod-location-mappings',
   mappingHistory: 'qcod-mapping-history',
   sectionHistory: 'qcod-section-history',
+  roomAssignmentHistory: 'qcod-room-assignment-history',
+  sectionBoundaries: 'qcod-section-boundaries',
+  roomSourceMetadata: 'qcod-room-source-metadata',
   importStatus: 'qcod-import-status',
 };
 
@@ -146,16 +149,21 @@ export function getSectionHistoryForSection(sectionId) {
 // v0.2 backup covers the full site hierarchy plus mapping/history data.
 // Import validates the shape before writing anything — a malformed backup
 // is rejected outright rather than partially overwriting good local data.
+//
+// v0.3 adds room assignment data. It intentionally never includes floor-plan
+// PDFs, department-map images, or absolute local file paths — only the
+// lightweight metadata in roomSourceMetadata (document name, floor, counts).
 
 const BACKUP_ARRAY_FIELDS = [
   'facilities', 'buildings', 'floors', 'sections', 'rooms', 'assets',
   'assetMappings', 'locationMappings', 'mappingHistory', 'sectionHistory',
-  'qcRecords', 'researchRecords',
+  'qcRecords', 'researchRecords', 'roomAssignmentHistory', 'sectionBoundaries',
+  'roomSourceMetadata',
 ];
 
 export function exportQcodBackup() {
   const backup = {
-    version: '0.2',
+    version: '0.3',
     exportedAt: new Date().toISOString(),
     facilities: getFacilities(),
     buildings: getBuildings(),
@@ -167,6 +175,9 @@ export function exportQcodBackup() {
     locationMappings: getLocationMappings(),
     mappingHistory: getMappingHistory(),
     sectionHistory: getSectionHistory(),
+    roomAssignmentHistory: getRoomAssignmentHistory(),
+    sectionBoundaries: getSectionBoundaries(),
+    roomSourceMetadata: getRoomSourceMetadata(),
     qcRecords: getQcRecords(),
     researchRecords: getResearchRecords(),
     importStatus: getImportStatus(),
@@ -217,6 +228,9 @@ export function importQcodBackup(file) {
         if (Array.isArray(backup.locationMappings)) saveLocalData(LOCAL_KEYS.locationMappings, backup.locationMappings);
         if (Array.isArray(backup.mappingHistory)) saveLocalData(LOCAL_KEYS.mappingHistory, backup.mappingHistory);
         if (Array.isArray(backup.sectionHistory)) saveLocalData(LOCAL_KEYS.sectionHistory, backup.sectionHistory);
+        if (Array.isArray(backup.roomAssignmentHistory)) saveLocalData(LOCAL_KEYS.roomAssignmentHistory, backup.roomAssignmentHistory);
+        if (Array.isArray(backup.sectionBoundaries)) saveLocalData(LOCAL_KEYS.sectionBoundaries, backup.sectionBoundaries);
+        if (Array.isArray(backup.roomSourceMetadata)) saveLocalData(LOCAL_KEYS.roomSourceMetadata, backup.roomSourceMetadata);
         if (Array.isArray(backup.qcRecords)) saveLocalData(LOCAL_KEYS.qcRecords, backup.qcRecords);
         if (Array.isArray(backup.researchRecords)) saveLocalData(LOCAL_KEYS.researchRecords, backup.researchRecords);
         if (Array.isArray(backup.qcPreview)) saveLocalData(LOCAL_KEYS.qcPreview, backup.qcPreview);
@@ -525,4 +539,108 @@ export function applyAssetMappings(assetNumbers, mapping, source = 'manual', { f
 
 export function clearAssetMapping(assetNumbers, source = 'manual') {
   return applyAssetMappings(assetNumbers, {}, source, { force: true });
+}
+
+// ---- Room assignment (Building 500 room-to-section workflow) ----
+// Section boundary configuration (data/private/building500-section-boundaries.json)
+// is intentionally NOT statically imported into the web bundle — that file is
+// git-ignored local operational data and may not exist on a fresh checkout.
+// Instead it's loaded into localStorage via a file picker (loadSectionBoundariesFromFile),
+// same pattern as backup restore. The engine in roomAssignment.js only ever
+// reads from getSectionBoundaries() below.
+
+export function getSectionBoundaries() {
+  return loadLocalData(LOCAL_KEYS.sectionBoundaries, []);
+}
+
+export function loadSectionBoundariesFromFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const parsed = JSON.parse(e.target.result);
+        if (!Array.isArray(parsed)) throw new Error('Section boundaries file must contain a JSON array.');
+        saveLocalData(LOCAL_KEYS.sectionBoundaries, parsed);
+        resolve(parsed);
+      } catch (err) {
+        reject(err);
+      }
+    };
+    reader.onerror = () => reject(reader.error || new Error('Failed to read file'));
+    reader.readAsText(file);
+  });
+}
+
+export function getRoomAssignmentHistory() {
+  return loadLocalData(LOCAL_KEYS.roomAssignmentHistory, []);
+}
+
+export function appendRoomAssignmentHistory(entries) {
+  if (!entries || entries.length === 0) return;
+  const current = getRoomAssignmentHistory();
+  saveLocalData(LOCAL_KEYS.roomAssignmentHistory, [...current, ...entries]);
+}
+
+export function getRoomSourceMetadata() {
+  return loadLocalData(LOCAL_KEYS.roomSourceMetadata, []);
+}
+
+// Applies a confirmed/rejected/needs-review/cleared status change to one or
+// more rooms (by room id). Every change is logged to room assignment
+// history — history is never overwritten, only appended to. This is the
+// single choke point every UI action in RoomAssignmentReview goes through,
+// so a batch action always requires the same explicit human trigger as a
+// single one — nothing here runs on its own.
+export function applyRoomAssignmentChange(roomIds, patch, source = 'manual_review') {
+  const rooms = getRooms();
+  const historyEntries = [];
+
+  const updated = rooms.map((r) => {
+    if (!roomIds.includes(r.id)) return r;
+    const previousSectionId = r.sectionId || '';
+    const previousStatus = r.assignmentStatus || 'unassigned';
+    const next = { ...r, ...patch };
+
+    historyEntries.push({
+      id: `${r.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      roomId: r.id,
+      previousSectionId,
+      newSectionId: next.sectionId || '',
+      previousStatus,
+      newStatus: next.assignmentStatus || previousStatus,
+      confidence: next.assignmentConfidence || '',
+      reason: next.assignmentReason || '',
+      source,
+      updatedAt: new Date().toISOString(),
+    });
+
+    return next;
+  });
+
+  saveLocalData(LOCAL_KEYS.rooms, updated);
+  appendRoomAssignmentHistory(historyEntries);
+  return { updatedCount: historyEntries.length };
+}
+
+export function getRoomCounts() {
+  const rooms = getRooms();
+  return {
+    roomsConfigured: rooms.length,
+    roomsAssigned: rooms.filter((r) => r.assignmentStatus === 'confirmed').length,
+    roomsUnassigned: rooms.filter((r) => r.assignmentStatus === 'unassigned').length,
+    roomsNeedingReview: rooms.filter((r) => r.assignmentStatus === 'needs_review' || r.assignmentStatus === 'suggested').length,
+    roomsCompleted: rooms.filter((r) => r.status === 'completed').length,
+    roomsReturnNeeded: rooms.filter((r) => r.status === 'return_needed').length,
+    roomsNoAccess: rooms.filter((r) => r.status === 'no_access').length,
+  };
+}
+
+// Room-derived section progress. Only returned when the section actually
+// has confirmed-assigned rooms — otherwise the caller should display
+// "Pending" rather than a 0% that implies real data.
+export function getRoomCompletionForSection(sectionId) {
+  const assigned = getRooms().filter((r) => r.sectionId === sectionId && r.assignmentStatus === 'confirmed');
+  if (assigned.length === 0) return null;
+  const completed = assigned.filter((r) => r.status === 'completed').length;
+  return Math.round((completed / assigned.length) * 100);
 }

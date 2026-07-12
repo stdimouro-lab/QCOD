@@ -510,16 +510,34 @@ export function previewSectionConfigRows(rows, existingSections = [], existingFl
   });
 }
 
+const VALID_ASSIGNMENT_STATUSES = new Set(['confirmed', 'suggested', 'unassigned', 'needs_review']);
+const VALID_ASSIGNMENT_CONFIDENCE = new Set(['high', 'medium', 'low', 'none']);
+const VALID_ASSIGNMENT_SOURCES = new Set(['department_map', 'architectural_plan', 'manual_review', 'approved_rule', 'unassigned']);
+
 export function previewRoomRows(rows, existingRooms = [], existingSections = []) {
   const seenIds = new Set();
+  const seenRoomNumbersByFloor = new Map(); // floorId -> Set(roomNumber)
+  existingRooms.forEach((r) => {
+    const set = seenRoomNumbersByFloor.get(r.floorId) || new Set();
+    set.add(normKey(r.roomNumber));
+    seenRoomNumbersByFloor.set(r.floorId, set);
+  });
+
   return rows.map((row) => {
     const facilityId = getField(row, 'Facility ID');
     const buildingId = getField(row, 'Building ID');
     const floorId = getField(row, 'Floor ID');
-    const sectionId = getField(row, 'Section ID');
+    const sectionId = getField(row, 'Section ID'); // may be blank — blank means unassigned
     const id = getField(row, 'Room ID');
     const roomNumber = getField(row, 'Room Number');
     const roomName = getField(row, 'Room Name');
+    const roomType = getField(row, 'Room Type');
+    const architecturalZone = getField(row, 'Architectural Zone');
+    const squareFeetRaw = getField(row, 'Square Feet');
+    const assignmentStatusRaw = getField(row, 'Assignment Status');
+    const assignmentConfidenceRaw = getField(row, 'Assignment Confidence');
+    const assignmentSourceRaw = getField(row, 'Assignment Source');
+    const assignmentReason = getField(row, 'Assignment Reason');
     const statusRaw = getField(row, 'Status');
     const lastUpdated = getField(row, 'Last Updated');
     const notes = getField(row, 'Notes');
@@ -529,14 +547,45 @@ export function previewRoomRows(rows, existingRooms = [], existingSections = [])
     if (!facilityId) errors.push('Facility ID is required');
     if (!buildingId) errors.push('Building ID is required');
     if (!floorId) errors.push('Floor ID is required');
-    if (!sectionId) errors.push('Section ID is required');
-    else if (!existingSections.some((s) => normKey(s.id) === normKey(sectionId) && normKey(s.floorId) === normKey(floorId))) {
-      errors.push(`Section ID "${sectionId}" does not exist on floor "${floorId}"`);
-    }
-    if (!id) errors.push('Room ID is required');
     if (!roomNumber) errors.push('Room Number is required');
+
+    let matchedSection = null;
+    if (sectionId) {
+      matchedSection = existingSections.find((s) => normKey(s.id) === normKey(sectionId));
+      if (!matchedSection) {
+        errors.push(`Section ID "${sectionId}" does not exist`);
+      } else if (normKey(matchedSection.floorId) !== normKey(floorId) || normKey(matchedSection.buildingId) !== normKey(buildingId)) {
+        // A section from another floor/building is never silently accepted.
+        errors.push(`Section "${sectionId}" belongs to a different floor/building than this room`);
+      }
+    }
+
+    if (!id) errors.push('Room ID is required');
     if (id && seenIds.has(normKey(id))) errors.push('Duplicate Room ID within this import batch');
     if (id) seenIds.add(normKey(id));
+
+    if (roomNumber && floorId) {
+      const floorSet = seenRoomNumbersByFloor.get(floorId) || new Set();
+      if (floorSet.has(normKey(roomNumber))) {
+        warnings.push(`Room Number "${roomNumber}" already exists on floor "${floorId}" — verify this isn't a duplicate`);
+      }
+      floorSet.add(normKey(roomNumber));
+      seenRoomNumbersByFloor.set(floorId, floorSet);
+    }
+
+    let squareFeet = null;
+    if (squareFeetRaw !== '') {
+      const num = Number(squareFeetRaw);
+      if (Number.isNaN(num)) warnings.push(`Square Feet "${squareFeetRaw}" is not numeric — left blank`);
+      else squareFeet = num;
+    }
+
+    const assignmentStatus = VALID_ASSIGNMENT_STATUSES.has(normKey(assignmentStatusRaw)) ? normKey(assignmentStatusRaw) : null;
+    if (assignmentStatusRaw && !assignmentStatus) warnings.push(`Unrecognized Assignment Status "${assignmentStatusRaw}"`);
+    const assignmentConfidence = VALID_ASSIGNMENT_CONFIDENCE.has(normKey(assignmentConfidenceRaw)) ? normKey(assignmentConfidenceRaw) : null;
+    if (assignmentConfidenceRaw && !assignmentConfidence) warnings.push(`Unrecognized Assignment Confidence "${assignmentConfidenceRaw}"`);
+    const assignmentSource = VALID_ASSIGNMENT_SOURCES.has(normKey(assignmentSourceRaw)) ? normKey(assignmentSourceRaw) : null;
+    if (assignmentSourceRaw && !assignmentSource) warnings.push(`Unrecognized Assignment Source "${assignmentSourceRaw}"`);
 
     const existing = existingRooms.find((r) => normKey(r.id) === normKey(id));
     const { status, warning } = friendlyStatusOrDefault(statusRaw);
@@ -545,8 +594,19 @@ export function previewRoomRows(rows, existingRooms = [], existingSections = [])
     const valid = errors.length === 0;
     const action = !valid ? 'skip' : existing ? 'update' : 'create';
     const normalized = valid ? {
-      id, facilityId, buildingId, floorId, sectionId,
-      roomNumber, name: roomName || existing?.name || '',
+      id, facilityId, buildingId, floorId,
+      sectionId: sectionId || existing?.sectionId || '',
+      roomNumber, roomName: roomName || existing?.roomName || '',
+      roomType: roomType || existing?.roomType || '',
+      architecturalZone: architecturalZone || existing?.architecturalZone || '',
+      squareFeet: squareFeet !== null ? squareFeet : (existing?.squareFeet ?? null),
+      assignmentStatus: assignmentStatus || existing?.assignmentStatus || (sectionId ? 'suggested' : 'unassigned'),
+      assignmentConfidence: assignmentConfidence || existing?.assignmentConfidence || 'none',
+      assignmentSource: assignmentSource || existing?.assignmentSource || (sectionId ? 'manual_review' : 'unassigned'),
+      assignmentReason: assignmentReason || existing?.assignmentReason || '',
+      sourceDocument: existing?.sourceDocument || '',
+      sourcePage: existing?.sourcePage ?? 1,
+      extractedLabel: existing?.extractedLabel || '',
       status: statusRaw ? status : (existing?.status || 'not_started'),
       lastUpdate: lastUpdated || existing?.lastUpdate || '',
       notes: notes || existing?.notes || '',

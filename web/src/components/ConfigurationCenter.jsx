@@ -10,14 +10,15 @@ const ENTITY_TYPES = [
   { id: 'buildings', label: 'Buildings', columns: ['id', 'facilityId', 'name', 'status', 'configured', 'notes'] },
   { id: 'floors', label: 'Floors', columns: ['id', 'facilityId', 'buildingId', 'name', 'level', 'status', 'notes'] },
   { id: 'sections', label: 'Sections', columns: ['id', 'facilityId', 'buildingId', 'floorId', 'name', 'status', 'completionPct', 'lastUpdate', 'notes'] },
-  { id: 'rooms', label: 'Rooms', columns: ['id', 'facilityId', 'buildingId', 'floorId', 'sectionId', 'roomNumber', 'name', 'status', 'lastUpdate', 'notes'] },
+  { id: 'rooms', label: 'Rooms', columns: ['id', 'facilityId', 'buildingId', 'floorId', 'sectionId', 'roomNumber', 'roomName', 'roomType', 'architecturalZone', 'assignmentStatus', 'status', 'lastUpdate', 'notes'] },
 ];
 
 const COLUMN_LABELS = {
   id: 'ID', facilityId: 'Facility', buildingId: 'Building', floorId: 'Floor', sectionId: 'Section',
   name: 'Name', city: 'City', state: 'State', status: 'Status', notes: 'Notes',
   configured: 'Configured', level: 'Level', completionPct: 'Completion %', lastUpdate: 'Last Updated',
-  roomNumber: 'Room Number',
+  roomNumber: 'Room Number', roomName: 'Room Name', roomType: 'Room Type',
+  architecturalZone: 'Zone', assignmentStatus: 'Assignment Status',
 };
 
 const DATASET_GETTERS = {

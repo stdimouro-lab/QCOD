@@ -1,12 +1,24 @@
 import { useState } from 'react';
 import { getRooms, getFacilities, getBuildings, getFloors, getSectionsForFloor, statuses } from '../lib/data';
 import { StatusBadge } from '../lib/status';
+import { getRoomZone } from '../lib/roomAssignment';
+import { exportReportToExcel } from '../lib/exportExcel';
+import { exportReportToPdf } from '../lib/exportPdf';
+
+const ROOM_REPORT_COLUMNS = [
+  { header: 'Floor', key: 'floorId' }, { header: 'Zone', key: 'zone' },
+  { header: 'Room Number', key: 'roomNumber' }, { header: 'Room Name', key: 'roomName' },
+  { header: 'Room Type', key: 'roomType' }, { header: 'Section', key: 'sectionName' },
+  { header: 'Assignment Status', key: 'assignmentStatus' }, { header: 'Confidence', key: 'assignmentConfidence' },
+  { header: 'Operational Status', key: 'status' }, { header: 'Last Updated', key: 'lastUpdate' }, { header: 'Notes', key: 'notes' },
+];
 
 export default function RoomTable({ facilityId }) {
   const [buildingFilter, setBuildingFilter] = useState('');
   const [floorFilter, setFloorFilter] = useState('');
   const [sectionFilter, setSectionFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [assignmentFilter, setAssignmentFilter] = useState(''); // '', 'assigned', 'unassigned', 'needs_review'
   const [search, setSearch] = useState('');
 
   const facilities = getFacilities();
@@ -19,9 +31,12 @@ export default function RoomTable({ facilityId }) {
   if (floorFilter) rooms = rooms.filter((r) => r.floorId === floorFilter);
   if (sectionFilter) rooms = rooms.filter((r) => r.sectionId === sectionFilter);
   if (statusFilter) rooms = rooms.filter((r) => r.status === statusFilter);
+  if (assignmentFilter === 'assigned') rooms = rooms.filter((r) => r.assignmentStatus === 'confirmed');
+  else if (assignmentFilter === 'unassigned') rooms = rooms.filter((r) => r.assignmentStatus === 'unassigned');
+  else if (assignmentFilter === 'needs_review') rooms = rooms.filter((r) => r.assignmentStatus === 'needs_review' || r.assignmentStatus === 'suggested');
   if (search.trim()) {
     const q = search.trim().toLowerCase();
-    rooms = rooms.filter((r) => r.roomNumber?.toLowerCase().includes(q) || r.name?.toLowerCase().includes(q));
+    rooms = rooms.filter((r) => r.roomNumber?.toLowerCase().includes(q) || r.roomName?.toLowerCase().includes(q));
   }
 
   const facilityName = (id) => facilities.find((f) => f.id === id)?.name ?? id;
@@ -67,12 +82,46 @@ export default function RoomTable({ facilityId }) {
         </label>
 
         <label>
+          Assignment
+          <select value={assignmentFilter} onChange={(e) => setAssignmentFilter(e.target.value)}>
+            <option value="">All</option>
+            <option value="assigned">Assigned</option>
+            <option value="unassigned">Unassigned</option>
+            <option value="needs_review">Needs Review</option>
+          </select>
+        </label>
+
+        <label>
           Search
           <input type="text" placeholder="Room number or name" value={search} onChange={(e) => setSearch(e.target.value)} />
         </label>
       </div>
 
       <p className="empty-note">{rooms.length} room{rooms.length === 1 ? '' : 's'} found.</p>
+
+      <div className="import-actions">
+        <button
+          className="btn-secondary"
+          onClick={() => exportReportToExcel({
+            reportName: 'Room Directory',
+            columns: ROOM_REPORT_COLUMNS,
+            rows: rooms.map((r) => ({ ...r, zone: getRoomZone(r.roomNumber), sectionName: sectionName(r) })),
+          })}
+        >
+          Export Excel
+        </button>
+        <button
+          className="btn-secondary"
+          onClick={() => exportReportToPdf({
+            reportName: 'Room Directory',
+            columns: ROOM_REPORT_COLUMNS,
+            rows: rooms.map((r) => ({ ...r, zone: getRoomZone(r.roomNumber), sectionName: sectionName(r) })),
+            emptyMessage: 'No room data has been configured for this selection.',
+          })}
+        >
+          Export PDF
+        </button>
+      </div>
 
       {rooms.length === 0 ? (
         <p className="empty-note">No room data has been configured for this selection.</p>
@@ -81,8 +130,9 @@ export default function RoomTable({ facilityId }) {
           <table>
             <thead>
               <tr>
-                <th>Facility</th><th>Building</th><th>Floor</th><th>Section</th>
-                <th>Room Number</th><th>Room Name</th><th>Status</th><th>Last Updated</th><th>Notes</th>
+                <th>Facility</th><th>Building</th><th>Floor</th><th>Zone</th><th>Section</th>
+                <th>Room Number</th><th>Room Name</th><th>Room Type</th><th>Assignment Status</th>
+                <th>Confidence</th><th>Operational Status</th><th>Last Updated</th><th>Notes</th>
               </tr>
             </thead>
             <tbody>
@@ -91,9 +141,13 @@ export default function RoomTable({ facilityId }) {
                   <td>{facilityName(r.facilityId)}</td>
                   <td>{buildingName(r.buildingId)}</td>
                   <td>{floorName(r.floorId)}</td>
+                  <td>{getRoomZone(r.roomNumber) || '—'}</td>
                   <td>{sectionName(r)}</td>
                   <td>{r.roomNumber}</td>
-                  <td>{r.name || '—'}</td>
+                  <td>{r.roomName || '—'}</td>
+                  <td>{r.roomType || '—'}</td>
+                  <td>{r.assignmentStatus || 'unassigned'}</td>
+                  <td>{r.assignmentConfidence || 'none'}</td>
                   <td><StatusBadge status={r.status} /></td>
                   <td>{r.lastUpdate || 'Not Updated'}</td>
                   <td>{r.notes || '—'}</td>

@@ -68,7 +68,7 @@ function MappingForm({ value, onChange }) {
         Room
         <select value={value.roomId} onChange={(e) => set('roomId', e.target.value)} disabled={!value.sectionId}>
           <option value="">Leave unchanged</option>
-          {rooms.map((r) => <option key={r.id} value={r.id}>{r.roomNumber} — {r.name}</option>)}
+          {rooms.map((r) => <option key={r.id} value={r.id}>{r.roomNumber} — {r.roomName}</option>)}
         </select>
       </label>
     </div>

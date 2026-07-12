@@ -9,12 +9,14 @@
     "sync:data": "node scripts/sync-data.js",
     "import:assets": "node scripts/import-assets.js",
     "import:sections": "node scripts/import-section-progress.js",
+    "extract:rooms": "node scripts/extract-building500-rooms.js",
+    "review:rooms": "node scripts/review-room-candidates.js",
     "dev": "npm run dev --prefix web",
     "build:web": "npm run build --prefix web",
-    "install:all": "npm install && npm install --prefix web",
-    "setup:source-folders": "powershell -ExecutionPolicy Bypass -File scripts/setup-private-source-folders.ps1"
+    "install:all": "npm install && npm install --prefix web"
   },
   "dependencies": {
-    "exceljs": "^4.4.0"
+    "exceljs": "^4.4.0",
+    "pdf-parse": "^2.4.5"
   }
 }
