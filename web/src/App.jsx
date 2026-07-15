@@ -13,6 +13,7 @@ import BuildingCards from './components/BuildingCards';
 import RoomTable from './components/RoomTable';
 import AssetMapping from './components/AssetMapping';
 import RoomAssignmentReview from './components/RoomAssignmentReview';
+import LocationMappingReview from './components/LocationMappingReview';
 import QcCenter from './components/QcCenter';
 import ResearchCenter from './components/ResearchCenter';
 import ProjectInfo from './components/ProjectInfo';
@@ -29,6 +30,7 @@ const TABS = [
   { id: 'sections', label: 'Sections' },
   { id: 'rooms', label: 'Rooms' },
   { id: 'room-assignment', label: 'Room Assignment' },
+  { id: 'location-mapping', label: 'Location Mapping' },
   { id: 'mapping', label: 'Asset Mapping' },
   { id: 'qc', label: 'QC' },
   { id: 'research', label: 'Research' },
@@ -148,6 +150,8 @@ export default function App() {
         {tab === 'rooms' && <RoomTable facilityId={selectedFacilityId} />}
 
         {tab === 'room-assignment' && <RoomAssignmentReview />}
+
+        {tab === 'location-mapping' && <LocationMappingReview />}
 
         {tab === 'mapping' && <AssetMapping />}
 

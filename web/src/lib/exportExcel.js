@@ -40,7 +40,8 @@ export function exportReportToExcel({ reportName, filters = {}, columns, rows, s
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, sheet, reportName.slice(0, 31));
 
-  const filename = `QCOD_${reportName.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+  const safeName = reportName.replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, '_');
+  const filename = `QCOD_${safeName}_${new Date().toISOString().slice(0, 10)}.xlsx`;
   XLSX.writeFile(workbook, filename);
   return filename;
 }

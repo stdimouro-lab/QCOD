@@ -33,6 +33,10 @@ export const LOCAL_KEYS = {
   roomAssignmentHistory: 'qcod-room-assignment-history',
   sectionBoundaries: 'qcod-section-boundaries',
   roomSourceMetadata: 'qcod-room-source-metadata',
+  locationAliases: 'qcod-location-aliases',
+  locationParserRules: 'qcod-location-parser-rules',
+  locationReviewHistory: 'qcod-location-review-history',
+  importHistory: 'qcod-import-history',
   importStatus: 'qcod-import-status',
 };
 
@@ -158,12 +162,13 @@ const BACKUP_ARRAY_FIELDS = [
   'facilities', 'buildings', 'floors', 'sections', 'rooms', 'assets',
   'assetMappings', 'locationMappings', 'mappingHistory', 'sectionHistory',
   'qcRecords', 'researchRecords', 'roomAssignmentHistory', 'sectionBoundaries',
-  'roomSourceMetadata',
+  'roomSourceMetadata', 'locationAliases', 'locationParserRules',
+  'locationReviewHistory', 'importHistory',
 ];
 
 export function exportQcodBackup() {
   const backup = {
-    version: '0.3',
+    version: '0.4',
     exportedAt: new Date().toISOString(),
     facilities: getFacilities(),
     buildings: getBuildings(),
@@ -178,6 +183,10 @@ export function exportQcodBackup() {
     roomAssignmentHistory: getRoomAssignmentHistory(),
     sectionBoundaries: getSectionBoundaries(),
     roomSourceMetadata: getRoomSourceMetadata(),
+    locationAliases: getLocationAliases(),
+    locationParserRules: getLocationParserRules(),
+    locationReviewHistory: getLocationReviewHistory(),
+    importHistory: getImportHistory(),
     qcRecords: getQcRecords(),
     researchRecords: getResearchRecords(),
     importStatus: getImportStatus(),
@@ -231,6 +240,10 @@ export function importQcodBackup(file) {
         if (Array.isArray(backup.roomAssignmentHistory)) saveLocalData(LOCAL_KEYS.roomAssignmentHistory, backup.roomAssignmentHistory);
         if (Array.isArray(backup.sectionBoundaries)) saveLocalData(LOCAL_KEYS.sectionBoundaries, backup.sectionBoundaries);
         if (Array.isArray(backup.roomSourceMetadata)) saveLocalData(LOCAL_KEYS.roomSourceMetadata, backup.roomSourceMetadata);
+        if (Array.isArray(backup.locationAliases)) saveLocalData(LOCAL_KEYS.locationAliases, backup.locationAliases);
+        if (Array.isArray(backup.locationParserRules)) saveLocalData(LOCAL_KEYS.locationParserRules, backup.locationParserRules);
+        if (Array.isArray(backup.locationReviewHistory)) saveLocalData(LOCAL_KEYS.locationReviewHistory, backup.locationReviewHistory);
+        if (Array.isArray(backup.importHistory)) saveLocalData(LOCAL_KEYS.importHistory, backup.importHistory);
         if (Array.isArray(backup.qcRecords)) saveLocalData(LOCAL_KEYS.qcRecords, backup.qcRecords);
         if (Array.isArray(backup.researchRecords)) saveLocalData(LOCAL_KEYS.researchRecords, backup.researchRecords);
         if (Array.isArray(backup.qcPreview)) saveLocalData(LOCAL_KEYS.qcPreview, backup.qcPreview);
@@ -643,4 +656,62 @@ export function getRoomCompletionForSection(sectionId) {
   if (assigned.length === 0) return null;
   const completed = assigned.filter((r) => r.status === 'completed').length;
   return Math.round((completed / assigned.length) * 100);
+}
+
+// ---- ENEX location aliases, parser rules, and review history ----
+// These are distinct from qcod-location-mappings (asset Location Name ->
+// section suggestions, used by Asset Mapping). Aliases/rules here resolve
+// AssetWorx ENEX/ENNX location CODES (e.g. "SPGD111-500") to official rooms.
+
+export function getLocationAliases() {
+  return loadLocalData(LOCAL_KEYS.locationAliases, []);
+}
+
+export function getLocationParserRules() {
+  return loadLocalData(LOCAL_KEYS.locationParserRules, []);
+}
+
+export function getLocationReviewHistory() {
+  return loadLocalData(LOCAL_KEYS.locationReviewHistory, []);
+}
+
+// Appends to review history — never overwrites what's there, per spec.
+export function appendLocationReviewHistory(entries) {
+  if (!entries || entries.length === 0) return;
+  const current = getLocationReviewHistory();
+  saveLocalData(LOCAL_KEYS.locationReviewHistory, [...current, ...entries]);
+}
+
+export function approveLocationAlias(alias) {
+  const existing = getLocationAliases();
+  // Reject a duplicate alias for the same facility + exact normalized location.
+  const dupe = existing.find((a) =>
+    (a.facilityId ?? '').toLowerCase() === (alias.facilityId ?? '').toLowerCase() &&
+    (a.rawLocationNormalized ?? '').toLowerCase() === (alias.rawLocationNormalized ?? '').toLowerCase()
+  );
+  if (dupe) {
+    throw new Error(`An approved alias for "${alias.rawLocationNormalized}" already exists.`);
+  }
+  const entry = { id: `alias-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, approvedAt: new Date().toISOString(), ...alias, approved: true };
+  saveLocalData(LOCAL_KEYS.locationAliases, [...existing, entry]);
+  return entry;
+}
+
+// Parser rules are NEVER auto-created from a single example — every rule
+// added here was an explicit human action (the confirmation warning lives
+// in the UI layer, LocationMappingReview.jsx).
+export function approveLocationParserRule(rule) {
+  const existing = getLocationParserRules();
+  const entry = { id: `rule-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, approvedAt: new Date().toISOString(), ...rule, approved: true };
+  saveLocalData(LOCAL_KEYS.locationParserRules, [...existing, entry]);
+  return entry;
+}
+
+export function getImportHistory() {
+  return loadLocalData(LOCAL_KEYS.importHistory, []);
+}
+
+export function appendImportHistory(entry) {
+  const current = getImportHistory();
+  saveLocalData(LOCAL_KEYS.importHistory, [...current, entry]);
 }

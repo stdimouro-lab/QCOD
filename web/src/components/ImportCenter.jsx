@@ -3,6 +3,7 @@ import {
   getSections, getFloors, getBuildings, getRooms, getFacilities,
   LOCAL_KEYS, saveLocalData, saveImportStatus,
   exportQcodBackup, importQcodBackup, clearLocalData, getAssets, appendSectionHistory,
+  getLocationAliases, getLocationParserRules, getQcRecords, getResearchRecords, appendImportHistory,
 } from '../lib/data';
 import {
   readWorkbookFile, getWorksheetNames, worksheetToRows, downloadJson,
@@ -11,12 +12,21 @@ import {
   applyFacilityImport, applyBuildingImport, applyFloorImport, applySectionConfigImport, applyRoomImport,
   buildErrorReportRows,
 } from '../lib/fileImport';
+import {
+  processEnexAssetRow, classifyDuplicates, buildImportPlan,
+  generateResearchRecords, generateQcRecords,
+} from '../lib/enexImport';
 
 const IMPORT_TYPES = [
   {
     id: 'assetworx', label: 'AssetWorx Inventory', group: 'Data Imports',
     accept: '.xlsx,.xls,.csv', kind: 'assetworx',
     requiredHeaders: ['Name', 'Serial Number', 'Description', 'Location Name', 'CMR', 'Last Inventoried', 'Last Observed Time', 'Disposal Status'],
+  },
+  {
+    id: 'enex', label: 'AssetWorx ENEX Import (with Location Resolution)', group: 'Data Imports',
+    accept: '.xlsx,.xls,.csv', kind: 'enex',
+    requiredHeaders: ['Name', 'Serial Number', 'Description', 'ENEX Location', 'CMR', 'Last Inventoried', 'Last Observed Time', 'Disposal Status'],
   },
   {
     id: 'section', label: 'Section Progress', group: 'Data Imports',
@@ -94,6 +104,77 @@ function formatBytes(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+// Runs the full ENEX pipeline (parse asset number -> resolve location ->
+// detect duplicates) against every row, purely for preview — nothing is
+// written to localStorage here. facilityId defaults to the first configured
+// facility since ENEX exports don't carry a facility column themselves.
+function buildEnexPreview(rows) {
+  const facilityId = getFacilities()[0]?.id || 'martinsburg-va';
+  const rooms = getRooms();
+  const aliases = getLocationAliases();
+  const rules = getLocationParserRules();
+
+  let scanErrors = 0;
+  let blanks = 0;
+  const processed = [];
+  const rowResults = []; // same length/order as `rows`, for the preview table
+
+  rows.forEach((row) => {
+    const result = processEnexAssetRow({
+      assetNumber: getField(row, 'Name'),
+      serialNumber: getField(row, 'Serial Number'),
+      description: getField(row, 'Description'),
+      rawLocation: getField(row, 'ENEX Location'),
+      cmr: getField(row, 'CMR'),
+      lastInventoried: getField(row, 'Last Inventoried'),
+      lastObservedTime: getField(row, 'Last Observed Time'),
+      disposalStatus: getField(row, 'Disposal Status'),
+    }, { facilityId, rooms, aliases, rules });
+
+    if (result.scanError) { scanErrors += 1; rowResults.push({ excluded: true, reason: 'Scanner misread (613 E...) — excluded' }); return; }
+    if (!result.included) { blanks += 1; rowResults.push({ excluded: true, reason: 'Blank asset number' }); return; }
+    processed.push(result);
+    rowResults.push(result);
+  });
+
+  const withDupes = classifyDuplicates(processed.map((p) => p.asset));
+  const finalProcessed = processed.map((p, i) => ({ ...p, asset: withDupes[i] }));
+  // Splice the deduped versions back into their original row positions.
+  let processedCursor = 0;
+  const finalRowResults = rowResults.map((r) => {
+    if (r.excluded) return r;
+    const updated = finalProcessed[processedCursor];
+    processedCursor += 1;
+    return updated;
+  });
+
+  const matched = finalProcessed.filter((p) => p.resolution?.status === 'matched').length;
+  const suggested = finalProcessed.filter((p) => p.resolution?.status === 'suggested').length;
+  const multiple = finalProcessed.filter((p) => p.resolution?.status === 'multiple_matches').length;
+  const unmatched = finalProcessed.filter((p) => p.resolution?.status === 'no_match' || p.resolution?.status === 'invalid_format').length;
+
+  return {
+    facilityId,
+    processed: finalProcessed,
+    rowResults: finalRowResults,
+    stats: {
+      totalRows: rows.length,
+      scanErrors,
+      blanks,
+      validAssets: finalProcessed.length,
+      matched,
+      suggested,
+      multiple,
+      unmatched,
+      missingSerial: finalProcessed.filter((p) => p.issues.includes('missing_serial_number')).length,
+      duplicateAssetNumber: finalProcessed.filter((p) => p.asset.issueTypes.includes('duplicate_asset_number')).length,
+      duplicateSerial: finalProcessed.filter((p) => p.asset.issueTypes.includes('duplicate_serial_number')).length,
+      notFoundInDb: finalProcessed.filter((p) => p.issues.includes('not_found_in_db')).length,
+      newAssetOrOffline: finalProcessed.filter((p) => p.issues.includes('new_asset_found') || p.issues.includes('offline_sync')).length,
+    },
+  };
+}
+
 export default function ImportCenter() {
   const [importTypeId, setImportTypeId] = useState('assetworx');
   const [file, setFile] = useState(null);
@@ -104,6 +185,7 @@ export default function ImportCenter() {
   const [error, setError] = useState('');
   const [applyResult, setApplyResult] = useState(null);
   const [backupStatus, setBackupStatus] = useState('');
+  const [importMode, setImportMode] = useState('replace_snapshot'); // 'replace_snapshot' | 'merge' — ENEX import only
 
   const importType = IMPORT_TYPES.find((t) => t.id === importTypeId);
 
@@ -159,6 +241,7 @@ export default function ImportCenter() {
   let assetPreview = null;
   let sectionPreview = null;
   let configPreview = null;
+  let enexPreview = null;
 
   if (importType.kind === 'assetworx' && rows.length > 0) {
     assetPreview = normalizeAssetRows(rows);
@@ -168,6 +251,9 @@ export default function ImportCenter() {
   }
   if (importType.kind === 'config' && rows.length > 0) {
     configPreview = CONFIG_HANDLERS[importType.configEntity].preview(rows);
+  }
+  if (importType.kind === 'enex' && rows.length > 0) {
+    enexPreview = buildEnexPreview(rows);
   }
 
   const genericPreview = importType.kind === 'generic' && rows.length > 0
@@ -211,6 +297,57 @@ export default function ImportCenter() {
       saveLocalData(importType.recordKey, [...existing, ...genericPreview]);
       saveImportStatus({ [importType.statusKey]: new Date().toISOString() });
       setApplyResult({ message: `Imported ${genericPreview.length} record(s).` });
+    } else if (importType.kind === 'enex' && enexPreview) {
+      const importId = `import-${Date.now()}`;
+      const newAssets = enexPreview.processed.map((p) => p.asset);
+      const existingAssets = getAssets();
+      const plan = buildImportPlan(existingAssets, newAssets, importMode);
+      saveLocalData(LOCAL_KEYS.assets, plan.finalAssets);
+
+      const researchResult = generateResearchRecords(enexPreview.processed, getResearchRecords(), { importId, facilityId: enexPreview.facilityId });
+      saveLocalData(LOCAL_KEYS.researchRecords, researchResult.records);
+
+      const sectionsById = new Map(getSections().map((s) => [s.id, s]));
+      const previousByNumber = new Map(existingAssets.map((a) => [a.assetNumber, a]));
+      const qcResult = generateQcRecords(enexPreview.processed, getQcRecords(), { importId, facilityId: enexPreview.facilityId, previousAssetsByNumber: previousByNumber, sectionsById });
+      saveLocalData(LOCAL_KEYS.qcRecords, qcResult.records);
+
+      const mapped = plan.finalAssets.filter((a) => a.buildingId).length;
+      saveImportStatus({
+        lastAssetImport: new Date().toISOString(),
+        assetsImported: plan.finalAssets.length,
+        assetsMapped: mapped,
+        assetsUnmapped: plan.finalAssets.length - mapped,
+      });
+
+      appendImportHistory({
+        id: importId,
+        sourceFileName: file?.name || '',
+        importType: 'enex',
+        importMode,
+        importedAt: new Date().toISOString(),
+        rowsRead: enexPreview.stats.totalRows,
+        validAssets: enexPreview.stats.validAssets,
+        scanErrorsIgnored: enexPreview.stats.scanErrors,
+        matchedLocations: enexPreview.stats.matched,
+        multipleMatches: enexPreview.stats.multiple,
+        unmatchedLocations: enexPreview.stats.unmatched,
+        researchCreated: researchResult.created,
+        researchUpdated: researchResult.updated,
+        qcCreated: qcResult.created,
+        qcUpdated: qcResult.updated,
+        assetsCreated: plan.created.length,
+        assetsUpdated: plan.updated.length,
+        warnings: plan.missingFromSnapshot.length > 0
+          ? [`${plan.missingFromSnapshot.length} previously-known asset(s) were not present in this snapshot.`]
+          : [],
+      });
+
+      setApplyResult({
+        message: `Import applied (${importMode === 'merge' ? 'Merge' : 'Replace Snapshot'}): ${plan.created.length} created, ${plan.updated.length} updated`
+          + (plan.missingFromSnapshot.length > 0 ? `, ${plan.missingFromSnapshot.length} not present in this snapshot (kept, not deleted)` : '')
+          + `. Research: ${researchResult.created} created / ${researchResult.updated} updated. QC: ${qcResult.created} created / ${qcResult.updated} updated.`,
+      });
     }
   };
 
@@ -308,6 +445,18 @@ export default function ImportCenter() {
         </div>
       )}
 
+      {importType.kind === 'enex' && (
+        <div className="import-controls">
+          <label>
+            Import Mode
+            <select value={importMode} onChange={(e) => setImportMode(e.target.value)}>
+              <option value="replace_snapshot">Replace Current Snapshot (default — daily full export)</option>
+              <option value="merge">Merge With Existing Assets</option>
+            </select>
+          </label>
+        </div>
+      )}
+
       {rows.length > 0 && (
         <>
           <h3 className="import-subheading">Validation Summary</h3>
@@ -347,6 +496,29 @@ export default function ImportCenter() {
             </dl>
           )}
 
+          {enexPreview && (
+            <dl className="asset-dl">
+              <div><dt>Rows read</dt><dd>{enexPreview.stats.totalRows}</dd></div>
+              <div><dt>Valid assets</dt><dd>{enexPreview.stats.validAssets}</dd></div>
+              <div><dt>Scanner misreads ignored</dt><dd>{enexPreview.stats.scanErrors}</dd></div>
+              <div><dt>Recognized locations (matched)</dt><dd>{enexPreview.stats.matched}</dd></div>
+              <div><dt>Unique-candidate suggestions</dt><dd>{enexPreview.stats.suggested}</dd></div>
+              <div><dt>Multiple-match locations</dt><dd>{enexPreview.stats.multiple}</dd></div>
+              <div><dt>Unmatched / invalid locations</dt><dd>{enexPreview.stats.unmatched}</dd></div>
+              <div><dt>Missing serial numbers</dt><dd>{enexPreview.stats.missingSerial}</dd></div>
+              <div><dt>Duplicate asset numbers</dt><dd>{enexPreview.stats.duplicateAssetNumber}</dd></div>
+              <div><dt>Duplicate serial numbers</dt><dd>{enexPreview.stats.duplicateSerial}</dd></div>
+              <div><dt>Not Found in DB</dt><dd>{enexPreview.stats.notFoundInDb}</dd></div>
+              <div><dt>New Asset / Offline Sync</dt><dd>{enexPreview.stats.newAssetOrOffline}</dd></div>
+            </dl>
+          )}
+          {enexPreview && (enexPreview.stats.suggested > 0 || enexPreview.stats.multiple > 0 || enexPreview.stats.unmatched > 0) && (
+            <p className="empty-note">
+              {enexPreview.stats.suggested + enexPreview.stats.multiple + enexPreview.stats.unmatched} location(s) need review in{' '}
+              <strong>Location Mapping</strong> before those assets get a confirmed room.
+            </p>
+          )}
+
           <h3 className="import-subheading">Import Preview</h3>
           <div className="table-wrap">
             <table>
@@ -356,6 +528,7 @@ export default function ImportCenter() {
                   {sectionPreview && <th>Match Status</th>}
                   {configPreview && <th>Action</th>}
                   {configPreview && <th>Errors / Warnings</th>}
+                  {enexPreview && <th>Location Resolution</th>}
                 </tr>
               </thead>
               <tbody>
@@ -384,6 +557,15 @@ export default function ImportCenter() {
                         {configPreview[i]?.warnings?.length > 0 && (
                           <span className="empty-note"> {configPreview[i].warnings.join('; ')}</span>
                         )}
+                      </td>
+                    )}
+                    {enexPreview && (
+                      <td>
+                        {enexPreview.rowResults[i]?.excluded
+                          ? <span className="empty-note">{enexPreview.rowResults[i].reason}</span>
+                          : (enexPreview.rowResults[i]?.resolution
+                              ? `${enexPreview.rowResults[i].resolution.status}${enexPreview.rowResults[i].issues.length ? ' — ' + enexPreview.rowResults[i].issues.join(', ') : ''}`
+                              : (enexPreview.rowResults[i]?.issues.join(', ') || '—'))}
                       </td>
                     )}
                   </tr>

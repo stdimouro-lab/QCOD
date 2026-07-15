@@ -5,7 +5,7 @@ import {
   getSectionsForFloor, getOutstandingSections, getBuildingTotals, getCampusSummary,
   getProjectTotals, pct, getValidAssets, getAssetIssueCounts, getImportStatus,
   getMappingHistory, getSectionHistory, getQcRecords, getResearchRecords,
-  getRoomAssignmentHistory,
+  getRoomAssignmentHistory, getAssets, getImportHistory,
 } from '../lib/data';
 import { getRoomZone } from '../lib/roomAssignment';
 import { exportReportToExcel } from '../lib/exportExcel';
@@ -38,6 +38,15 @@ const REPORTS = [
   { id: 'roomsNeedingReview', label: 'Rooms Needing Review', filters: ['building', 'floor'] },
   { id: 'roomAssignmentHistory', label: 'Room Assignment History', filters: ['startDate', 'endDate'] },
   { id: 'sectionRoomMatrix', label: 'Section-to-Room Matrix', filters: ['building', 'floor', 'section'] },
+  { id: 'enexImportSummary', label: 'ENEX Import Summary', filters: [] },
+  { id: 'unresolvedEnexLocations', label: 'Unresolved ENEX Locations', filters: [] },
+  { id: 'openResearchItems', label: 'Open Research Items', filters: ['building'] },
+  { id: 'pendingQc', label: 'Pending QC', filters: ['building'] },
+  { id: 'duplicateAssets', label: 'Duplicate Assets', filters: [] },
+  { id: 'missingSerialNumbers', label: 'Missing Serial Numbers', filters: [] },
+  { id: 'unmappedAssetsReport', label: 'Unmapped Assets', filters: [] },
+  { id: 'assetsByBuilding', label: 'Assets by Building', filters: ['building'] },
+  { id: 'importHistoryReport', label: 'Import History', filters: ['startDate', 'endDate'] },
 ];
 
 function statusLabel(key) {
@@ -494,6 +503,111 @@ function buildReport(reportId, filters) {
         { header: 'Assignment Status', key: 'assignmentStatus' }, { header: 'Confidence', key: 'confidence' }, { header: 'Assignment Source', key: 'source' },
       ];
       return { columns, rows: mapped, summaryLines: [], emptyMessage: 'No rooms are assigned to a section yet.' };
+    }
+
+    case 'enexImportSummary': {
+      const history = getImportHistory();
+      const rows = history.slice().reverse().map((h) => ({
+        importedAt: new Date(h.importedAt).toLocaleString(), sourceFileName: h.sourceFileName, mode: h.importMode,
+        rowsRead: h.rowsRead, validAssets: h.validAssets, scanErrors: h.scanErrorsIgnored,
+        matched: h.matchedLocations, multiple: h.multipleMatches, unmatched: h.unmatchedLocations,
+        researchCreated: h.researchCreated, qcCreated: h.qcCreated, assetsCreated: h.assetsCreated, assetsUpdated: h.assetsUpdated,
+      }));
+      const columns = [
+        { header: 'Imported At', key: 'importedAt' }, { header: 'File', key: 'sourceFileName' }, { header: 'Mode', key: 'mode' },
+        { header: 'Rows Read', key: 'rowsRead' }, { header: 'Valid Assets', key: 'validAssets' }, { header: 'Scan Errors', key: 'scanErrors' },
+        { header: 'Matched', key: 'matched' }, { header: 'Multiple Matches', key: 'multiple' }, { header: 'Unmatched', key: 'unmatched' },
+        { header: 'Research Created', key: 'researchCreated' }, { header: 'QC Created', key: 'qcCreated' },
+        { header: 'Assets Created', key: 'assetsCreated' }, { header: 'Assets Updated', key: 'assetsUpdated' },
+      ];
+      return { columns, rows, summaryLines: [], emptyMessage: 'No ENEX imports have been run yet.' };
+    }
+
+    case 'unresolvedEnexLocations': {
+      const assets = getAssets().filter((a) => (a.rawLocation ?? '').trim() !== '' && !a.roomId);
+      const byLocation = new Map();
+      assets.forEach((a) => {
+        const key = a.rawLocation.trim().toUpperCase();
+        byLocation.set(key, (byLocation.get(key) || 0) + 1);
+      });
+      const rows = Array.from(byLocation.entries()).map(([rawLocation, count]) => ({ rawLocation, assetCount: count }));
+      const columns = [{ header: 'Raw Location', key: 'rawLocation' }, { header: 'Assets Affected', key: 'assetCount' }];
+      return { columns, rows, summaryLines: [], emptyMessage: 'No unresolved ENEX locations — every imported location resolved to a room.' };
+    }
+
+    case 'openResearchItems': {
+      let rows = getResearchRecords().filter((r) => r.status === 'open');
+      if (filters.building) rows = rows.filter((r) => r.buildingId === filters.building);
+      const mapped = rows.map((r) => ({ assetNumber: r.assetNumber, issueType: r.issueType, description: r.description, rawLocation: r.rawLocation, createdAt: new Date(r.createdAt).toLocaleDateString(), notes: r.notes }));
+      const columns = [
+        { header: 'Asset Number', key: 'assetNumber' }, { header: 'Issue Type', key: 'issueType' }, { header: 'Description', key: 'description' },
+        { header: 'Raw Location', key: 'rawLocation' }, { header: 'Created', key: 'createdAt' }, { header: 'Notes', key: 'notes' },
+      ];
+      return { columns, rows: mapped, summaryLines: [`Open Research items: ${mapped.length}`], emptyMessage: 'No open Research items.' };
+    }
+
+    case 'pendingQc': {
+      let rows = getQcRecords().filter((r) => r.status === 'pending');
+      if (filters.building) rows = rows.filter((r) => r.buildingId === filters.building);
+      const mapped = rows.map((r) => ({ assetNumber: r.assetNumber, qcType: r.qcType, roomId: r.roomId || '', createdAt: new Date(r.createdAt).toLocaleDateString(), notes: r.notes }));
+      const columns = [
+        { header: 'Asset Number', key: 'assetNumber' }, { header: 'QC Type', key: 'qcType' }, { header: 'Room', key: 'roomId' },
+        { header: 'Created', key: 'createdAt' }, { header: 'Notes', key: 'notes' },
+      ];
+      return { columns, rows: mapped, summaryLines: [`Pending QC items: ${mapped.length}`], emptyMessage: 'No pending QC items.' };
+    }
+
+    case 'duplicateAssets': {
+      const assets = getValidAssets();
+      const counts = new Map();
+      assets.forEach((a) => counts.set(a.assetNumber, (counts.get(a.assetNumber) || 0) + 1));
+      const rows = assets.filter((a) => counts.get(a.assetNumber) > 1).map((a) => ({ assetNumber: a.assetNumber, serialNumber: a.serialNumber, description: a.description, locationName: a.locationName }));
+      const columns = [
+        { header: 'Asset Number', key: 'assetNumber' }, { header: 'Serial Number', key: 'serialNumber' },
+        { header: 'Description', key: 'description' }, { header: 'Location Name', key: 'locationName' },
+      ];
+      return { columns, rows, summaryLines: [], emptyMessage: 'No duplicate asset numbers found.' };
+    }
+
+    case 'missingSerialNumbers': {
+      const rows = getValidAssets().filter((a) => !a.serialNumber).map((a) => ({ assetNumber: a.assetNumber, description: a.description, locationName: a.locationName }));
+      const columns = [{ header: 'Asset Number', key: 'assetNumber' }, { header: 'Description', key: 'description' }, { header: 'Location Name', key: 'locationName' }];
+      return { columns, rows, summaryLines: [], emptyMessage: 'No assets are missing a serial number.' };
+    }
+
+    case 'unmappedAssetsReport': {
+      const rows = getValidAssets().filter((a) => !a.buildingId).map((a) => ({ assetNumber: a.assetNumber, serialNumber: a.serialNumber, description: a.description, locationName: a.locationName, rawLocation: a.rawLocation || '' }));
+      const columns = [
+        { header: 'Asset Number', key: 'assetNumber' }, { header: 'Serial Number', key: 'serialNumber' },
+        { header: 'Description', key: 'description' }, { header: 'Location Name', key: 'locationName' }, { header: 'Raw Location', key: 'rawLocation' },
+      ];
+      return { columns, rows, summaryLines: [`Unmapped assets: ${rows.length}`], emptyMessage: 'No unmapped assets — every asset has a building.' };
+    }
+
+    case 'assetsByBuilding': {
+      let assets = getValidAssets().filter((a) => a.buildingId);
+      if (filters.building) assets = assets.filter((a) => a.buildingId === filters.building);
+      const rows = assets.map((a) => ({ buildingId: a.buildingId, assetNumber: a.assetNumber, description: a.description, roomId: a.roomId || 'Unmapped' }));
+      const columns = [
+        { header: 'Building', key: 'buildingId' }, { header: 'Asset Number', key: 'assetNumber' },
+        { header: 'Description', key: 'description' }, { header: 'Room', key: 'roomId' },
+      ];
+      return { columns, rows, summaryLines: [], emptyMessage: 'No assets are mapped to a building yet.' };
+    }
+
+    case 'importHistoryReport': {
+      let history = getImportHistory();
+      if (filters.startDate) history = history.filter((h) => h.importedAt >= filters.startDate);
+      if (filters.endDate) history = history.filter((h) => h.importedAt <= filters.endDate + 'T23:59:59');
+      const rows = history.slice().reverse().map((h) => ({
+        importedAt: new Date(h.importedAt).toLocaleString(), sourceFileName: h.sourceFileName, importType: h.importType,
+        mode: h.importMode, rowsRead: h.rowsRead, assetsCreated: h.assetsCreated, assetsUpdated: h.assetsUpdated,
+      }));
+      const columns = [
+        { header: 'Imported At', key: 'importedAt' }, { header: 'File', key: 'sourceFileName' }, { header: 'Type', key: 'importType' },
+        { header: 'Mode', key: 'mode' }, { header: 'Rows Read', key: 'rowsRead' }, { header: 'Created', key: 'assetsCreated' }, { header: 'Updated', key: 'assetsUpdated' },
+      ];
+      return { columns, rows, summaryLines: [], emptyMessage: 'No imports recorded yet.' };
     }
 
     default:
