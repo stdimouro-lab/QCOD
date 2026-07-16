@@ -79,6 +79,6 @@ describe('Backup excludes source documents — Part 11 test 14', () => {
     // Windows/Unix absolute path or embedded binary PDF data should appear.
     expect(serialized).not.toMatch(/C:\\/);
     expect(serialized).not.toMatch(/%PDF-/); // PDF file signature — would indicate embedded binary content
-    expect(backup.version).toBe('0.4');
+    expect(backup.version).toBe('0.5');
   });
 });

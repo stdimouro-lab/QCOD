@@ -7,6 +7,9 @@ import bundledRooms from '../../../data/rooms.json';
 import bundledAssets from '../../../data/assets.json';
 import statuses from '../../../data/statuses.json';
 import bundledImportStatus from '../../../data/import-status.json';
+import { buildAuditEntry, appendAuditEntries } from './auditLog.js';
+import { createPreImportSnapshot, addBackup, resolveUndo, removeBackup } from './importSafety.js';
+import { runDataQualityChecks } from './dataQuality.js';
 
 export { project, statuses };
 
@@ -38,6 +41,11 @@ export const LOCAL_KEYS = {
   locationReviewHistory: 'qcod-location-review-history',
   importHistory: 'qcod-import-history',
   importStatus: 'qcod-import-status',
+  // V9 additions
+  auditLog: 'qcod-audit-log',
+  importBackups: 'qcod-import-backups',
+  researchHistory: 'qcod-research-history',
+  qcHistory: 'qcod-qc-history',
 };
 
 const DATA_CHANGED_EVENT = 'qcod-data-changed';
@@ -164,11 +172,16 @@ const BACKUP_ARRAY_FIELDS = [
   'qcRecords', 'researchRecords', 'roomAssignmentHistory', 'sectionBoundaries',
   'roomSourceMetadata', 'locationAliases', 'locationParserRules',
   'locationReviewHistory', 'importHistory',
+  // V9 additions
+  'auditLog', 'importBackups', 'researchHistory', 'qcHistory',
 ];
+
+export const CURRENT_BACKUP_VERSION = '0.5';
 
 export function exportQcodBackup() {
   const backup = {
-    version: '0.4',
+    version: CURRENT_BACKUP_VERSION,
+    appVersion: project.version,
     exportedAt: new Date().toISOString(),
     facilities: getFacilities(),
     buildings: getBuildings(),
@@ -189,9 +202,14 @@ export function exportQcodBackup() {
     importHistory: getImportHistory(),
     qcRecords: getQcRecords(),
     researchRecords: getResearchRecords(),
+    auditLog: getAuditLog(),
+    importBackups: getImportBackups(),
+    researchHistory: getResearchHistory(),
+    qcHistory: getQcHistory(),
     importStatus: getImportStatus(),
   };
   saveImportStatus({ lastBackupExport: backup.exportedAt });
+  recordAuditEntry(buildAuditEntry({ action: 'backup_created', entityType: 'backup', entityId: backup.exportedAt, notes: `Backup version ${backup.version}` }));
   return backup;
 }
 
@@ -216,6 +234,22 @@ export function validateBackupShape(backup) {
   return { valid: errors.length === 0, errors };
 }
 
+// A short human-readable summary of what a backup file contains, shown to
+// the user before they commit to restoring it.
+export function summarizeBackup(backup) {
+  const counts = {};
+  BACKUP_ARRAY_FIELDS.forEach((field) => {
+    counts[field] = Array.isArray(backup[field]) ? backup[field].length : 0;
+  });
+  return {
+    version: backup.version || 'unknown',
+    appVersion: backup.appVersion || 'unknown',
+    exportedAt: backup.exportedAt || 'unknown',
+    versionMismatch: backup.version !== CURRENT_BACKUP_VERSION,
+    counts,
+  };
+}
+
 export function importQcodBackup(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -227,6 +261,12 @@ export function importQcodBackup(file) {
           reject(new Error(`Backup file rejected — ${errors.join(' ')}`));
           return;
         }
+
+        // Always snapshot the current state before overwriting it with a
+        // restored backup, so a restore itself can be undone by re-importing
+        // this auto-snapshot.
+        const preRestoreSnapshot = exportQcodBackup();
+
         if (Array.isArray(backup.facilities)) saveLocalData(LOCAL_KEYS.facilities, backup.facilities);
         if (Array.isArray(backup.buildings)) saveLocalData(LOCAL_KEYS.buildings, backup.buildings);
         if (Array.isArray(backup.floors)) saveLocalData(LOCAL_KEYS.floors, backup.floors);
@@ -248,7 +288,21 @@ export function importQcodBackup(file) {
         if (Array.isArray(backup.researchRecords)) saveLocalData(LOCAL_KEYS.researchRecords, backup.researchRecords);
         if (Array.isArray(backup.qcPreview)) saveLocalData(LOCAL_KEYS.qcPreview, backup.qcPreview);
         if (Array.isArray(backup.researchPreview)) saveLocalData(LOCAL_KEYS.researchPreview, backup.researchPreview);
+        // V9 fields — absent in older (V8 and earlier) backups, which is
+        // fine: loadLocalData's fallback ([]) is used automatically, so
+        // restoring an old backup just starts these logs fresh rather than
+        // failing. That IS the V8 -> V9 migration: no destructive rewrite,
+        // older backups simply don't populate what didn't exist yet.
+        if (Array.isArray(backup.auditLog)) saveLocalData(LOCAL_KEYS.auditLog, backup.auditLog);
+        if (Array.isArray(backup.importBackups)) saveLocalData(LOCAL_KEYS.importBackups, backup.importBackups);
+        if (Array.isArray(backup.researchHistory)) saveLocalData(LOCAL_KEYS.researchHistory, backup.researchHistory);
+        if (Array.isArray(backup.qcHistory)) saveLocalData(LOCAL_KEYS.qcHistory, backup.qcHistory);
         if (backup.importStatus) saveLocalData(LOCAL_KEYS.importStatus, backup.importStatus);
+
+        recordAuditEntry(buildAuditEntry({
+          action: 'backup_restored', entityType: 'backup', entityId: backup.exportedAt || 'unknown',
+          notes: `Restored backup version ${backup.version}. Pre-restore snapshot taken at ${preRestoreSnapshot.exportedAt}.`,
+        }));
         resolve(backup);
       } catch (err) {
         reject(err);
@@ -687,14 +741,52 @@ export function approveLocationAlias(alias) {
   // Reject a duplicate alias for the same facility + exact normalized location.
   const dupe = existing.find((a) =>
     (a.facilityId ?? '').toLowerCase() === (alias.facilityId ?? '').toLowerCase() &&
-    (a.rawLocationNormalized ?? '').toLowerCase() === (alias.rawLocationNormalized ?? '').toLowerCase()
+    (a.rawLocationNormalized ?? '').toLowerCase() === (alias.rawLocationNormalized ?? '').toLowerCase() &&
+    a.approved
   );
   if (dupe) {
     throw new Error(`An approved alias for "${alias.rawLocationNormalized}" already exists.`);
   }
   const entry = { id: `alias-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, approvedAt: new Date().toISOString(), ...alias, approved: true };
   saveLocalData(LOCAL_KEYS.locationAliases, [...existing, entry]);
+  recordAuditEntry(buildAuditEntry({ action: 'alias_approved', entityType: 'location_alias', entityId: entry.id, newValue: entry.roomId }));
   return entry;
+}
+
+// Reassigns an existing alias to point at a different room. The OLD alias
+// is preserved (marked reassigned, not deleted) so its history/audit trail
+// stays intact — a brand new alias entry is created for the new mapping.
+export function reassignLocationAlias(aliasId, newRoomId) {
+  const existing = getLocationAliases();
+  const target = existing.find((a) => a.id === aliasId);
+  if (!target) throw new Error(`Alias "${aliasId}" not found.`);
+  const previousRoomId = target.roomId;
+
+  const updated = existing.map((a) => (a.id === aliasId ? { ...a, approved: false, reassignedTo: newRoomId, reassignedAt: new Date().toISOString() } : a));
+  const newEntry = {
+    id: `alias-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    facilityId: target.facilityId, buildingId: target.buildingId, sourceSystem: target.sourceSystem,
+    rawLocationNormalized: target.rawLocationNormalized, roomId: newRoomId,
+    approved: true, approvedAt: new Date().toISOString(),
+    reassignedFrom: aliasId, notes: `Reassigned from ${previousRoomId} to ${newRoomId}`,
+  };
+  saveLocalData(LOCAL_KEYS.locationAliases, [...updated, newEntry]);
+  recordAuditEntry(buildAuditEntry({ action: 'alias_reassigned', entityType: 'location_alias', entityId: aliasId, previousValue: previousRoomId, newValue: newRoomId }));
+  return newEntry;
+}
+
+export function disableLocationAlias(aliasId) {
+  const existing = getLocationAliases();
+  const updated = existing.map((a) => (a.id === aliasId ? { ...a, approved: false, disabledAt: new Date().toISOString() } : a));
+  saveLocalData(LOCAL_KEYS.locationAliases, updated);
+  recordAuditEntry(buildAuditEntry({ action: 'alias_disabled', entityType: 'location_alias', entityId: aliasId }));
+}
+
+export function disableLocationParserRule(ruleId) {
+  const existing = getLocationParserRules();
+  const updated = existing.map((r) => (r.id === ruleId ? { ...r, approved: false, disabledAt: new Date().toISOString() } : r));
+  saveLocalData(LOCAL_KEYS.locationParserRules, updated);
+  recordAuditEntry(buildAuditEntry({ action: 'parser_rule_disabled', entityType: 'location_parser_rule', entityId: ruleId }));
 }
 
 // Parser rules are NEVER auto-created from a single example — every rule
@@ -714,4 +806,86 @@ export function getImportHistory() {
 export function appendImportHistory(entry) {
   const current = getImportHistory();
   saveLocalData(LOCAL_KEYS.importHistory, [...current, entry]);
+}
+
+// ---- V9: Audit log ----
+
+export function getAuditLog() {
+  return loadLocalData(LOCAL_KEYS.auditLog, []);
+}
+
+export function recordAuditEntry(entry) {
+  const current = getAuditLog();
+  saveLocalData(LOCAL_KEYS.auditLog, appendAuditEntries(current, entry));
+}
+
+// ---- V9: Import transaction safety (pre-import backups + undo) ----
+
+export function getImportBackups() {
+  return loadLocalData(LOCAL_KEYS.importBackups, []);
+}
+
+// Snapshots the datasets a major import can touch (assets, QC, Research)
+// before anything is written. Called by ImportCenter immediately before
+// applying an ENEX/AssetWorx import.
+export function savePreImportSnapshot(importId) {
+  const snapshot = createPreImportSnapshot(importId, {
+    assets: getAssets(),
+    qcRecords: getQcRecords(),
+    researchRecords: getResearchRecords(),
+  });
+  const current = getImportBackups();
+  saveLocalData(LOCAL_KEYS.importBackups, addBackup(current, snapshot));
+  return snapshot;
+}
+
+// Restores the pre-import state for a given import ID, if a backup still
+// exists for it. Returns true on success, false if there was nothing to
+// restore (already undone, or the backup aged out).
+export function undoImport(importId) {
+  const backups = getImportBackups();
+  const datasets = resolveUndo(backups, importId);
+  if (!datasets) return false;
+
+  saveLocalData(LOCAL_KEYS.assets, datasets.assets);
+  saveLocalData(LOCAL_KEYS.qcRecords, datasets.qcRecords);
+  saveLocalData(LOCAL_KEYS.researchRecords, datasets.researchRecords);
+  saveLocalData(LOCAL_KEYS.importBackups, removeBackup(backups, importId));
+
+  recordAuditEntry(buildAuditEntry({
+    action: 'import_undone', entityType: 'import', entityId: importId,
+    notes: 'Restored pre-import snapshot (assets, QC, Research)',
+  }));
+  return true;
+}
+
+// ---- V9: Research / QC history (immutable) ----
+
+export function getResearchHistory() {
+  return loadLocalData(LOCAL_KEYS.researchHistory, []);
+}
+
+export function appendResearchHistory(entries) {
+  if (!entries || entries.length === 0) return;
+  saveLocalData(LOCAL_KEYS.researchHistory, [...getResearchHistory(), ...entries]);
+}
+
+export function getQcHistory() {
+  return loadLocalData(LOCAL_KEYS.qcHistory, []);
+}
+
+export function appendQcHistory(entries) {
+  if (!entries || entries.length === 0) return;
+  saveLocalData(LOCAL_KEYS.qcHistory, [...getQcHistory(), ...entries]);
+}
+
+// ---- V9: Data Quality ----
+
+export function runDataQuality() {
+  return runDataQualityChecks({
+    facilities: getFacilities(), buildings: getBuildings(), floors: getFloors(),
+    sections: getSections(), rooms: getRooms(), assets: getAssets(),
+    qcRecords: getQcRecords(), researchRecords: getResearchRecords(),
+    aliases: getLocationAliases(), rules: getLocationParserRules(),
+  });
 }

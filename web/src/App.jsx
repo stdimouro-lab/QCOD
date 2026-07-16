@@ -21,6 +21,7 @@ import DataStatus from './components/DataStatus';
 import ImportCenter from './components/ImportCenter';
 import ReportCenter from './components/ReportCenter';
 import ConfigurationCenter from './components/ConfigurationCenter';
+import DataQualityCenter from './components/DataQualityCenter';
 import { StatusDot } from './lib/status';
 
 const TABS = [
@@ -38,6 +39,7 @@ const TABS = [
   { id: 'imports', label: 'Imports' },
   { id: 'reports', label: 'Reports' },
   { id: 'configuration', label: 'Configuration' },
+  { id: 'data-quality', label: 'Data Quality' },
 ];
 
 const FACILITY_SCOPED_TABS = new Set(['buildings', 'floors', 'sections', 'rooms', 'outstanding']);
@@ -179,6 +181,8 @@ export default function App() {
         {tab === 'reports' && <ReportCenter defaultFacilityId={selectedFacilityId} />}
 
         {tab === 'configuration' && <ConfigurationCenter />}
+
+        {tab === 'data-quality' && <DataQualityCenter />}
       </main>
 
       <footer className="footer">

@@ -48,7 +48,7 @@ describe('localStorage helpers', () => {
     saveLocalData(LOCAL_KEYS.assets, [{ assetNumber: '613 EE00001', issueTypes: [] }]);
     const backup = exportQcodBackup();
     expect(backup.assets).toHaveLength(1);
-    expect(backup.version).toBe('0.4');
+    expect(backup.version).toBe('0.5');
 
     clearLocalData();
     expect(loadLocalData(LOCAL_KEYS.assets, [])).toHaveLength(0);

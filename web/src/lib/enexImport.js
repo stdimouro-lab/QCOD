@@ -193,48 +193,70 @@ const ISSUE_TO_RESEARCH_LABEL = {
  * An asset that already has an OPEN Research record for a given issue type
  * gets that record updated, never duplicated.
  */
+// Statuses that mean "this issue is still being worked" — a new import
+// updates these in place rather than creating a duplicate. Resolved/Closed
+// are terminal: if the same issue reappears after one of those, a NEW
+// record is created (status "reopened"), and the old one is left untouched
+// — that's the immutable history the spec requires.
+const ACTIVE_RESEARCH_STATUSES = new Set(['open', 'in_review', 'waiting_for_information', 'reopened']);
+const TERMINAL_RESEARCH_STATUSES = new Set(['resolved', 'closed']);
+
 export function generateResearchRecords(processedAssets, existingRecords, { importId, facilityId }) {
   const records = existingRecords.map((r) => ({ ...r }));
   let created = 0;
   let updated = 0;
+  let reopened = 0;
 
   processedAssets.forEach(({ asset, issues }) => {
     issues.forEach((issueType) => {
-      const existingOpen = records.find(
-        (r) => r.assetNumber === asset.assetNumber && r.issueType === issueType && r.status === 'open'
+      const existingActive = records.find(
+        (r) => r.assetNumber === asset.assetNumber && r.issueType === issueType && ACTIVE_RESEARCH_STATUSES.has(r.status)
       );
-      if (existingOpen) {
-        existingOpen.importId = importId;
-        existingOpen.rawLocation = asset.rawLocation;
-        existingOpen.notes = ISSUE_TO_RESEARCH_LABEL[issueType] || issueType;
+      if (existingActive) {
+        existingActive.importId = importId;
+        existingActive.sourceImportId = importId;
+        existingActive.rawLocation = asset.rawLocation;
+        existingActive.lastUpdated = new Date().toISOString();
+        existingActive.notes = ISSUE_TO_RESEARCH_LABEL[issueType] || issueType;
         updated += 1;
-      } else {
-        records.push({
-          id: `research-${asset.assetNumber}-${issueType}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          source: 'enex_import',
-          importId,
-          facilityId: asset.facilityId || facilityId,
-          buildingId: asset.buildingId || '',
-          floorId: asset.floorId || '',
-          sectionId: asset.sectionId || '',
-          roomId: asset.roomId || '',
-          assetNumber: asset.assetNumber,
-          serialNumber: asset.serialNumber,
-          rawLocation: asset.rawLocation,
-          description: asset.description,
-          issueType,
-          status: 'open',
-          createdAt: new Date().toISOString(),
-          resolvedAt: '',
-          resolutionNotes: '',
-          notes: ISSUE_TO_RESEARCH_LABEL[issueType] || issueType,
-        });
-        created += 1;
+        return;
       }
+
+      const hadTerminalRecord = records.some(
+        (r) => r.assetNumber === asset.assetNumber && r.issueType === issueType && TERMINAL_RESEARCH_STATUSES.has(r.status)
+      );
+      if (hadTerminalRecord) reopened += 1;
+
+      records.push({
+        id: `research-${asset.assetNumber}-${issueType}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        source: 'enex_import',
+        importId,
+        sourceImportId: importId,
+        facilityId: asset.facilityId || facilityId,
+        buildingId: asset.buildingId || '',
+        floorId: asset.floorId || '',
+        sectionId: asset.sectionId || '',
+        roomId: asset.roomId || '',
+        assetNumber: asset.assetNumber,
+        serialNumber: asset.serialNumber,
+        rawLocation: asset.rawLocation,
+        description: asset.description,
+        issueType,
+        status: hadTerminalRecord ? 'reopened' : 'open',
+        priority: 'normal',
+        assignedTo: '',
+        resolution: '',
+        createdAt: new Date().toISOString(),
+        lastUpdated: new Date().toISOString(),
+        resolvedAt: '',
+        resolutionNotes: '',
+        notes: ISSUE_TO_RESEARCH_LABEL[issueType] || issueType,
+      });
+      created += 1;
     });
   });
 
-  return { records, created, updated };
+  return { records, created, updated, reopened };
 }
 
 // ---- QC record generation (Part 12) ----
@@ -244,6 +266,12 @@ export function generateResearchRecords(processedAssets, existingRecords, { impo
  * asset. `previousAssetsByNumber` (a Map) lets this detect "reappeared
  * after missing", "mapping changed", etc.
  */
+// "Closed" is the only terminal status here — everything else (pending,
+// selected, passed, failed, needs_correction, recheck_required) is still
+// "active" for dedup purposes, so re-importing the same condition updates
+// the existing record instead of stacking duplicates.
+const QC_TERMINAL_STATUSES = new Set(['closed']);
+
 export function generateQcRecords(processedAssets, existingRecords, { importId, facilityId, previousAssetsByNumber = new Map(), sectionsById = new Map() } = {}) {
   const records = existingRecords.map((r) => ({ ...r }));
   let created = 0;
@@ -251,7 +279,7 @@ export function generateQcRecords(processedAssets, existingRecords, { importId, 
 
   const addOrUpdate = (assetNumber, serialNumber, mapping, qcType) => {
     const existingActive = records.find(
-      (r) => r.assetNumber === assetNumber && r.qcType === qcType && r.status === 'pending'
+      (r) => r.assetNumber === assetNumber && r.qcType === qcType && !QC_TERMINAL_STATUSES.has(r.status)
     );
     if (existingActive) {
       existingActive.importId = importId;
@@ -262,6 +290,7 @@ export function generateQcRecords(processedAssets, existingRecords, { importId, 
       id: `qc-${assetNumber}-${qcType}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       source: 'enex_import',
       importId,
+      sourceImportId: importId,
       facilityId: mapping.facilityId || facilityId,
       buildingId: mapping.buildingId || '',
       floorId: mapping.floorId || '',
@@ -271,6 +300,14 @@ export function generateQcRecords(processedAssets, existingRecords, { importId, 
       serialNumber,
       qcType,
       status: 'pending',
+      assignedTo: '',
+      selectedDate: '',
+      reviewedDate: '',
+      reviewer: '',
+      result: '',
+      failureReason: '',
+      correctiveAction: '',
+      recheckDate: '',
       createdAt: new Date().toISOString(),
       completedAt: '',
       notes: '',

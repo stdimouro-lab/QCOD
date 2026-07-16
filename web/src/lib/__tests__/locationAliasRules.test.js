@@ -46,7 +46,7 @@ describe('Broad rule requires explicit approval', () => {
 describe('Backup excludes source documents', () => {
   it('backup version is 0.4 and includes the new ENEX-related arrays', () => {
     const backup = exportQcodBackup();
-    expect(backup.version).toBe('0.4');
+    expect(backup.version).toBe('0.5');
     expect(backup).toHaveProperty('locationAliases');
     expect(backup).toHaveProperty('locationParserRules');
     expect(backup).toHaveProperty('locationReviewHistory');

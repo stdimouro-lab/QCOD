@@ -7,9 +7,11 @@ function filtersToLines(filters) {
   return [`Filters: ${active.map(([k, v]) => `${k} = ${v}`).join(', ')}`];
 }
 
-// Builds a single-sheet report: a title block (QCOD, report name, facility,
-// generated date/time, filters) followed by a header row and the data rows.
-export function exportReportToExcel({ reportName, filters = {}, columns, rows, summaryLines = [] }) {
+// Builds a single-sheet report workbook: a title block (QCOD, report name,
+// facility, generated date/time, filters) followed by a header row and the
+// data rows. Pure — no file I/O — so it's directly unit-testable, and
+// exportReportToExcel just adds the save-to-disk step on top.
+export function buildReportWorkbook({ reportName, filters = {}, columns, rows, summaryLines = [] }) {
   const generatedAt = new Date().toLocaleString();
   const titleBlock = [
     ['QCOD'],
@@ -39,7 +41,11 @@ export function exportReportToExcel({ reportName, filters = {}, columns, rows, s
 
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, sheet, reportName.slice(0, 31));
+  return workbook;
+}
 
+export function exportReportToExcel({ reportName, filters = {}, columns, rows, summaryLines = [] }) {
+  const workbook = buildReportWorkbook({ reportName, filters, columns, rows, summaryLines });
   const safeName = reportName.replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, '_');
   const filename = `QCOD_${safeName}_${new Date().toISOString().slice(0, 10)}.xlsx`;
   XLSX.writeFile(workbook, filename);
