@@ -24,23 +24,50 @@ import ConfigurationCenter from './components/ConfigurationCenter';
 import DataQualityCenter from './components/DataQualityCenter';
 import { StatusDot } from './lib/status';
 
-const TABS = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'buildings', label: 'Buildings' },
-  { id: 'floors', label: 'Floors' },
-  { id: 'sections', label: 'Sections' },
-  { id: 'rooms', label: 'Rooms' },
-  { id: 'room-assignment', label: 'Room Assignment' },
-  { id: 'location-mapping', label: 'Location Mapping' },
-  { id: 'mapping', label: 'Asset Mapping' },
-  { id: 'qc', label: 'QC' },
-  { id: 'research', label: 'Research' },
-  { id: 'outstanding', label: 'Outstanding Work' },
-  { id: 'imports', label: 'Imports' },
-  { id: 'reports', label: 'Reports' },
-  { id: 'configuration', label: 'Configuration' },
-  { id: 'data-quality', label: 'Data Quality' },
+const NAV_GROUPS = [
+  { id: 'overview', label: 'Overview', tabs: [{ id: 'overview', label: 'Overview' }] },
+  {
+    id: 'hierarchy', label: 'Hierarchy',
+    tabs: [
+      { id: 'buildings', label: 'Buildings' },
+      { id: 'floors', label: 'Floors' },
+      { id: 'sections', label: 'Sections' },
+      { id: 'rooms', label: 'Rooms' },
+    ],
+  },
+  {
+    id: 'review', label: 'Review Queues',
+    tabs: [
+      { id: 'room-assignment', label: 'Room Assignment' },
+      { id: 'location-mapping', label: 'Location Mapping' },
+      { id: 'mapping', label: 'Asset Mapping' },
+      { id: 'data-quality', label: 'Data Quality' },
+    ],
+  },
+  {
+    id: 'work', label: 'Work',
+    tabs: [
+      { id: 'qc', label: 'QC' },
+      { id: 'research', label: 'Research' },
+      { id: 'outstanding', label: 'Outstanding Work' },
+    ],
+  },
+  {
+    id: 'admin', label: 'Admin',
+    tabs: [
+      { id: 'imports', label: 'Imports' },
+      { id: 'reports', label: 'Reports' },
+      { id: 'configuration', label: 'Configuration' },
+    ],
+  },
 ];
+
+// Flat lookup, since most of the app still just needs "is this tab active".
+const TABS = NAV_GROUPS.flatMap((g) => g.tabs);
+
+function groupForTab(tabId) {
+  return NAV_GROUPS.find((g) => g.tabs.some((t) => t.id === tabId)) || NAV_GROUPS[0];
+}
 
 const FACILITY_SCOPED_TABS = new Set(['buildings', 'floors', 'sections', 'rooms', 'outstanding']);
 const BUILDING_SELECTOR_TABS = new Set(['floors', 'sections']);
@@ -53,6 +80,7 @@ export default function App() {
   // getSections()/getAssets() call below re-reads fresh data on re-render —
   // the dashboard updates immediately without a page reload.
   const [, setDataVersion] = useState(0);
+  const [showOverviewDetails, setShowOverviewDetails] = useState(false);
 
   useEffect(() => onDataChanged(() => setDataVersion((v) => v + 1)), []);
 
@@ -95,19 +123,38 @@ export default function App() {
       </div>
 
       <nav className="tabs">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            className={tab === t.id ? 'active' : ''}
-            onClick={() => setTab(t.id)}
-          >
-            {t.label}
-            {t.id === 'outstanding' && outstanding.length > 0 && (
-              <span className="tab-badge">{outstanding.length}</span>
-            )}
-          </button>
-        ))}
+        {NAV_GROUPS.map((g) => {
+          const isActiveGroup = groupForTab(tab).id === g.id;
+          const groupBadge = g.tabs.some((t) => t.id === 'outstanding') ? outstanding.length : 0;
+          return (
+            <button
+              key={g.id}
+              className={isActiveGroup ? 'active' : ''}
+              onClick={() => setTab(g.tabs[0].id)}
+            >
+              {g.label}
+              {groupBadge > 0 && <span className="tab-badge">{groupBadge}</span>}
+            </button>
+          );
+        })}
       </nav>
+
+      {groupForTab(tab).tabs.length > 1 && (
+        <nav className="sub-tabs">
+          {groupForTab(tab).tabs.map((t) => (
+            <button
+              key={t.id}
+              className={tab === t.id ? 'active' : ''}
+              onClick={() => setTab(t.id)}
+            >
+              {t.label}
+              {t.id === 'outstanding' && outstanding.length > 0 && (
+                <span className="tab-badge">{outstanding.length}</span>
+              )}
+            </button>
+          ))}
+        </nav>
+      )}
 
       {FACILITY_SCOPED_TABS.has(tab) && (
         <div className="selector-row">
@@ -122,8 +169,19 @@ export default function App() {
         {tab === 'overview' && (
           <>
             <StatCards />
-            <ProjectInfo />
-            <DataStatus />
+            <button
+              className="btn-secondary"
+              style={{ marginBottom: '1rem' }}
+              onClick={() => setShowOverviewDetails((v) => !v)}
+            >
+              {showOverviewDetails ? 'Hide' : 'Show'} project & data status details
+            </button>
+            {showOverviewDetails && (
+              <>
+                <ProjectInfo />
+                <DataStatus />
+              </>
+            )}
           </>
         )}
 

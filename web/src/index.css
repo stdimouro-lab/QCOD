@@ -139,6 +139,41 @@ body {
   background: rgba(255, 255, 255, 0.25);
 }
 
+.sub-tabs {
+  display: flex;
+  gap: 0.4rem;
+  margin: -0.5rem 0 1.25rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--slate-200);
+  flex-wrap: wrap;
+}
+
+.sub-tabs button {
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  color: var(--slate-400);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: all 0.15s;
+}
+
+.sub-tabs button:hover {
+  color: var(--navy);
+  background: var(--slate-100);
+}
+
+.sub-tabs button.active {
+  color: var(--navy);
+  background: var(--slate-100);
+  font-weight: 600;
+}
+
 /* Stat cards */
 .stat-grid {
   display: grid;
@@ -650,6 +685,10 @@ tbody tr:hover {
   .tabs button {
     padding: 0.55rem 0.8rem;
     font-size: 0.8rem;
+  }
+  .sub-tabs button {
+    padding: 0.45rem 0.65rem;
+    font-size: 0.75rem;
   }
 
   /* Tables already scroll horizontally via .table-wrap; just ensure text stays readable */
