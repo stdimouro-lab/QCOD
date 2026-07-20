@@ -1,1 +1,43 @@
-REMOVED FILE: web/src/components/AssetMapping.jsx (replaced by MasterAssetList.jsx)
+QCOD V10 — Removed Files
+========================
+This file lists files intentionally removed in V10. It is a plain-text
+record only — it must never contain executable code.
+
+File: web/src/components/RoomAssignmentReview.jsx
+Reason: Manually assigning a room to a section duplicated functionality
+  that belongs to AssetWorx's location/tagging workflow. Removed as part
+  of eliminating the "Review Queues" navigation group.
+Replacement or retained behavior: The Rooms page (web/src/components/RoomTable.jsx)
+  still displays each room's current section, assignment status, and
+  confidence for project-progress visibility. The underlying pure logic in
+  web/src/lib/roomAssignment.js (suggestRoomSection, applyConfirmedRoomAssignment,
+  validateRoomAssignment, getRoomZone, etc.) was NOT deleted — getRoomZone is
+  still actively used by RoomTable and Reports; the assignment-suggestion
+  functions are now unused by any UI but retained as tested utility functions
+  in case the receiving team wants to re-wire them into a future workflow.
+
+File: web/src/components/LocationMappingReview.jsx
+Reason: Manually reviewing and approving ENEX location-to-room matches
+  duplicated AssetWorx's own location management. Removed as part of
+  eliminating the "Review Queues" navigation group.
+Replacement or retained behavior: Automatic location resolution during
+  ENEX/AssetWorx import (web/src/lib/enexLocationParser.js, and the alias/
+  rule lookups in web/src/lib/data.js) is still fully active and used by
+  the Imports pipeline — only the manual human-review screen was removed.
+  Aliases and parser rules still only ever resolve a location when there is
+  an exact, deterministic match; ambiguous locations are never guessed.
+
+File: web/src/components/DataQualityCenter.jsx
+Reason: A standalone "Data Quality" review queue was removed per the V10
+  navigation simplification.
+Replacement or retained behavior: The underlying validation logic
+  (web/src/lib/dataQuality.js, runDataQuality() in data.js) was NOT
+  removed. Data-quality signals (missing serials, duplicates, unmatched
+  locations, orphaned records, etc.) remain available to any future report
+  or filter that wants to surface them — there is simply no dedicated
+  navigation tab for browsing them as a queue anymore.
+
+Note on navigation IDs: the tab formerly named "mapping" (labeled "Asset
+Mapping" in an earlier version, later "Master Asset List") has been
+renamed to the tab ID "master-assets" for clarity. No files were removed
+for this rename — only web/src/App.jsx was updated.

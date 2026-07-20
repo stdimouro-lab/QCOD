@@ -181,7 +181,7 @@ const BACKUP_ARRAY_FIELDS = [
   'masterAssetList',
 ];
 
-export const CURRENT_BACKUP_VERSION = '0.6';
+export const CURRENT_BACKUP_VERSION = '0.7';
 
 export function exportQcodBackup() {
   const backup = {

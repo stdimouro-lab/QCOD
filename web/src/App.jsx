@@ -12,8 +12,6 @@ import FacilitySelector from './components/FacilitySelector';
 import BuildingCards from './components/BuildingCards';
 import RoomTable from './components/RoomTable';
 import MasterAssetList from './components/MasterAssetList';
-import RoomAssignmentReview from './components/RoomAssignmentReview';
-import LocationMappingReview from './components/LocationMappingReview';
 import QcCenter from './components/QcCenter';
 import ResearchCenter from './components/ResearchCenter';
 import ProjectInfo from './components/ProjectInfo';
@@ -21,13 +19,12 @@ import DataStatus from './components/DataStatus';
 import ImportCenter from './components/ImportCenter';
 import ReportCenter from './components/ReportCenter';
 import ConfigurationCenter from './components/ConfigurationCenter';
-import DataQualityCenter from './components/DataQualityCenter';
 import { StatusDot } from './lib/status';
 
 const NAV_GROUPS = [
-  { id: 'overview', label: 'Overview', tabs: [{ id: 'overview', label: 'Overview' }] },
+  { id: 'overview', label: 'Overview', tabs: [{ id: 'overview', label: 'Dashboard' }] },
   {
-    id: 'hierarchy', label: 'Hierarchy',
+    id: 'project', label: 'Project',
     tabs: [
       { id: 'buildings', label: 'Buildings' },
       { id: 'floors', label: 'Floors' },
@@ -36,30 +33,22 @@ const NAV_GROUPS = [
     ],
   },
   {
-    id: 'review', label: 'Review Queues',
+    id: 'assets', label: 'Assets',
     tabs: [
-      { id: 'room-assignment', label: 'Room Assignment' },
-      { id: 'location-mapping', label: 'Location Mapping' },
-      { id: 'mapping', label: 'Master Asset List' },
-      { id: 'data-quality', label: 'Data Quality' },
+      { id: 'master-assets', label: 'Master Asset List' },
+      { id: 'imports', label: 'Imports' },
     ],
   },
   {
-    id: 'work', label: 'Work',
+    id: 'operations', label: 'Operations',
     tabs: [
       { id: 'qc', label: 'QC' },
       { id: 'research', label: 'Research' },
       { id: 'outstanding', label: 'Outstanding Work' },
     ],
   },
-  {
-    id: 'admin', label: 'Admin',
-    tabs: [
-      { id: 'imports', label: 'Imports' },
-      { id: 'reports', label: 'Reports' },
-      { id: 'configuration', label: 'Configuration' },
-    ],
-  },
+  { id: 'reports', label: 'Reports', tabs: [{ id: 'reports', label: 'Reports' }] },
+  { id: 'admin', label: 'Admin', tabs: [{ id: 'configuration', label: 'Configuration' }] },
 ];
 
 // Flat lookup, since most of the app still just needs "is this tab active".
@@ -209,11 +198,7 @@ export default function App() {
 
         {tab === 'rooms' && <RoomTable facilityId={selectedFacilityId} />}
 
-        {tab === 'room-assignment' && <RoomAssignmentReview />}
-
-        {tab === 'location-mapping' && <LocationMappingReview />}
-
-        {tab === 'mapping' && <MasterAssetList />}
+        {tab === 'master-assets' && <MasterAssetList />}
 
         {tab === 'qc' && <QcCenter />}
 
@@ -239,8 +224,6 @@ export default function App() {
         {tab === 'reports' && <ReportCenter defaultFacilityId={selectedFacilityId} />}
 
         {tab === 'configuration' && <ConfigurationCenter />}
-
-        {tab === 'data-quality' && <DataQualityCenter />}
       </main>
 
       <footer className="footer">

@@ -1,0 +1,8 @@
+QCOD Version 10
+Quality Control Operations Dashboard
+Pre-Handoff Proof of Concept
+
+V10 removes AssetWorx-duplicate review queues, improves the
+Master Asset List, preserves QC and Research, adds or improves
+ENNX import support, and prepares the project for migration into
+the receiving development team's framework and SQL environment.
