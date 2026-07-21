@@ -47,8 +47,10 @@ export default function ResearchCenter() {
         QCOD currently runs locally. Selected files are processed in this browser and are not uploaded to a server.
       </p>
       <p className="empty-note">
-        Research records only come from this manual import — QCOD never creates a Research item automatically
-        from an invalid AssetWorx scan ("613 E..." misreads are excluded from imports entirely, not routed here).
+        Research records are created automatically during an AssetWorx/ENEX import when a real, explicit
+        condition is met (missing serial number, unmatched or ambiguous location, duplicate asset/serial,
+        marked Not Found in DB, etc.) — never guessed. A known scanner misread ("613 E..." missing the second
+        E) is excluded from the import entirely and never becomes a Research item.
       </p>
 
       <div className="import-controls">

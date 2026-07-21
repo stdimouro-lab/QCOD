@@ -73,7 +73,6 @@ writing application data. Its core pattern:
 | `qcod-research-records`, `qcod-research-preview`, `qcod-research-history` | Research work queue, import preview, immutable history |
 | `qcod-location-mappings`, `qcod-mapping-history` | Asset Location-Name -> section suggestions (free-text based) + history |
 | `qcod-location-aliases`, `qcod-location-parser-rules`, `qcod-location-review-history` | ENEX location-code resolution: exact aliases, department/zone parser rules, and the decision log for both |
-| `qcod-room-assignment-history` | Historical record of room->section assignment changes (no longer written to by any V10 UI — see `REMOVED_FILES.txt` — but preserved for backup compatibility) |
 | `qcod-section-boundaries`, `qcod-room-source-metadata` | Local operational config for Building 500 room extraction |
 | `qcod-import-history`, `qcod-import-status`, `qcod-import-backups` | Import traceability + pre-import snapshots for undo |
 | `qcod-audit-log` | Append-only audit trail of meaningful actions |
@@ -178,7 +177,7 @@ to AssetWorx.
 ## Backup structure
 
 `exportQcodBackup()` in `data.js` bundles every `localStorage` key above
-into one JSON file with `version` (currently `0.7`), `appVersion`
+into one JSON file with `version` (currently `0.8`), `appVersion`
 (`project.version`, currently `"Version 10"`), and `exportedAt`.
 `validateBackupShape()` checks every array field really is an array before
 `importQcodBackup()` writes anything; a malformed file is rejected outright.
@@ -194,7 +193,7 @@ include uploaded file binary contents, absolute file paths, or credentials.
   (`facilityId`, `buildingId`, `floorId`, `sectionId`, `roomId`) that
   translate directly to real foreign keys.
 - History/log tables (`mappingHistory`, `sectionHistory`,
-  `roomAssignmentHistory`, `locationReviewHistory`, `auditLog`,
+  `locationReviewHistory`, `auditLog`,
   `researchHistory`, `qcHistory`) are already append-only in the current
   code — a real database's `INSERT`-only table with no `UPDATE`/`DELETE`
   grants would enforce what the JS currently only enforces by convention.

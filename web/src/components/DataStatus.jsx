@@ -2,6 +2,7 @@ import {
   getImportStatus, getValidAssets, getMappedAssets, getUnmappedAssets,
   getQcRecords, getResearchRecords, getFacilities, getBuildings, getFloors,
   getSections, getRooms, getConfiguredBuildings, getHierarchyCompleteness,
+  getOutstandingSections, getMasterAssetListImportStatus,
 } from '../lib/data';
 
 function fmtTimestamp(value) {
@@ -12,10 +13,13 @@ function fmtTimestamp(value) {
 
 export default function DataStatus() {
   const importStatus = getImportStatus();
+  const masterStatus = getMasterAssetListImportStatus();
   const validAssets = getValidAssets();
   const mapped = getMappedAssets();
   const unmapped = getUnmappedAssets();
   const hierarchy = getHierarchyCompleteness();
+  const openQc = getQcRecords().filter((r) => r.status !== 'closed').length;
+  const openResearch = getResearchRecords().filter((r) => r.status === 'open' || r.status === 'in_review' || r.status === 'reopened' || r.status === 'waiting_for_information').length;
 
   const rows = [
     ['Facilities Configured', getFacilities().length],
@@ -26,13 +30,15 @@ export default function DataStatus() {
     ['Rooms with Verified Parents', hierarchy.roomsWithValidParents],
     ['Rooms Pending Section Configuration', hierarchy.roomsPendingSection],
     ['Hierarchy Errors', hierarchy.hierarchyErrors],
-    ['Assets Imported', validAssets.length],
-    ['Mapped Assets', mapped.length],
-    ['Unmapped Assets', unmapped.length],
-    ['QC Records', getQcRecords().length],
-    ['Research Records', getResearchRecords().length],
-    ['Last Asset Import', fmtTimestamp(importStatus.lastAssetImport)],
-    ['Last Section Import', fmtTimestamp(importStatus.lastSectionImport)],
+    ['Master Asset Records', masterStatus.count || 0],
+    ['Current AssetWorx/ENEX Records', validAssets.length],
+    ['Assets with Building Reference', mapped.length],
+    ['Assets Missing Building Reference', unmapped.length],
+    ['Open QC Records', openQc],
+    ['Open Research Records', openResearch],
+    ['Outstanding Sections', getOutstandingSections().length],
+    ['Last Master Asset Import', fmtTimestamp(masterStatus.lastImportedAt)],
+    ['Last AssetWorx/ENEX Import', fmtTimestamp(importStatus.lastAssetImport)],
     ['Last Configuration Import', fmtTimestamp(importStatus.lastConfigImport)],
     ['Last Backup Export', fmtTimestamp(importStatus.lastBackupExport)],
   ];

@@ -33,7 +33,6 @@ export const LOCAL_KEYS = {
   locationMappings: 'qcod-location-mappings',
   mappingHistory: 'qcod-mapping-history',
   sectionHistory: 'qcod-section-history',
-  roomAssignmentHistory: 'qcod-room-assignment-history',
   sectionBoundaries: 'qcod-section-boundaries',
   roomSourceMetadata: 'qcod-room-source-metadata',
   locationAliases: 'qcod-location-aliases',
@@ -172,7 +171,7 @@ export function getSectionHistoryForSection(sectionId) {
 const BACKUP_ARRAY_FIELDS = [
   'facilities', 'buildings', 'floors', 'sections', 'rooms', 'assets',
   'assetMappings', 'locationMappings', 'mappingHistory', 'sectionHistory',
-  'qcRecords', 'researchRecords', 'roomAssignmentHistory', 'sectionBoundaries',
+  'qcRecords', 'researchRecords', 'sectionBoundaries',
   'roomSourceMetadata', 'locationAliases', 'locationParserRules',
   'locationReviewHistory', 'importHistory',
   // V9 additions
@@ -181,7 +180,7 @@ const BACKUP_ARRAY_FIELDS = [
   'masterAssetList',
 ];
 
-export const CURRENT_BACKUP_VERSION = '0.7';
+export const CURRENT_BACKUP_VERSION = '0.8';
 
 export function exportQcodBackup() {
   const backup = {
@@ -198,7 +197,6 @@ export function exportQcodBackup() {
     locationMappings: getLocationMappings(),
     mappingHistory: getMappingHistory(),
     sectionHistory: getSectionHistory(),
-    roomAssignmentHistory: getRoomAssignmentHistory(),
     sectionBoundaries: getSectionBoundaries(),
     roomSourceMetadata: getRoomSourceMetadata(),
     locationAliases: getLocationAliases(),
@@ -283,7 +281,6 @@ export function importQcodBackup(file) {
         if (Array.isArray(backup.locationMappings)) saveLocalData(LOCAL_KEYS.locationMappings, backup.locationMappings);
         if (Array.isArray(backup.mappingHistory)) saveLocalData(LOCAL_KEYS.mappingHistory, backup.mappingHistory);
         if (Array.isArray(backup.sectionHistory)) saveLocalData(LOCAL_KEYS.sectionHistory, backup.sectionHistory);
-        if (Array.isArray(backup.roomAssignmentHistory)) saveLocalData(LOCAL_KEYS.roomAssignmentHistory, backup.roomAssignmentHistory);
         if (Array.isArray(backup.sectionBoundaries)) saveLocalData(LOCAL_KEYS.sectionBoundaries, backup.sectionBoundaries);
         if (Array.isArray(backup.roomSourceMetadata)) saveLocalData(LOCAL_KEYS.roomSourceMetadata, backup.roomSourceMetadata);
         if (Array.isArray(backup.locationAliases)) saveLocalData(LOCAL_KEYS.locationAliases, backup.locationAliases);
@@ -651,16 +648,6 @@ export function loadSectionBoundariesFromFile(file) {
     reader.onerror = () => reject(reader.error || new Error('Failed to read file'));
     reader.readAsText(file);
   });
-}
-
-export function getRoomAssignmentHistory() {
-  return loadLocalData(LOCAL_KEYS.roomAssignmentHistory, []);
-}
-
-export function appendRoomAssignmentHistory(entries) {
-  if (!entries || entries.length === 0) return;
-  const current = getRoomAssignmentHistory();
-  saveLocalData(LOCAL_KEYS.roomAssignmentHistory, [...current, ...entries]);
 }
 
 export function getRoomSourceMetadata() {

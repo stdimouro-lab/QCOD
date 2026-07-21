@@ -41,3 +41,26 @@ Note on navigation IDs: the tab formerly named "mapping" (labeled "Asset
 Mapping" in an earlier version, later "Master Asset List") has been
 renamed to the tab ID "master-assets" for clarity. No files were removed
 for this rename — only web/src/App.jsx was updated.
+
+Feature: qcod-room-assignment-history (localStorage key) and its
+getRoomAssignmentHistory()/appendRoomAssignmentHistory() functions
+Reason removed: this key only ever existed to log changes made by the
+  retired Room Assignment Review workflow. Once that workflow's UI and
+  its only caller (applyRoomAssignmentChange) were removed in the prior
+  pass, nothing wrote to this key anymore — it was dead storage.
+Replacement or retained behavior: room-level history is no longer
+  tracked separately from the room record itself; a room's current
+  sectionId and status are the source of truth. The key was also removed
+  from the backup schema (bumped to version 0.8) since a retired,
+  never-written dataset has no reason to be preserved going forward.
+  Any OLDER backup (version 0.7 or earlier) that happens to contain this
+  field will simply have it ignored on restore — restoring an old backup
+  still works, it just won't repopulate a key nothing uses anymore.
+
+Text correction: ResearchCenter.jsx's on-page description previously said
+  "Research records only come from this manual import" — this was
+  inaccurate leftover text from before automatic Research generation
+  (via AssetWorx/ENEX import) was added. Corrected to describe the real,
+  current behavior: Research records are generated automatically from
+  specific, explicit import conditions (never guessed), and scanner
+  misreads are still excluded entirely.
