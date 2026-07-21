@@ -1,7 +1,7 @@
 import {
   getImportStatus, getValidAssets, getMappedAssets, getUnmappedAssets,
   getQcRecords, getResearchRecords, getFacilities, getBuildings, getFloors,
-  getSections, getRooms, getConfiguredBuildings,
+  getSections, getRooms, getConfiguredBuildings, getHierarchyCompleteness,
 } from '../lib/data';
 
 function fmtTimestamp(value) {
@@ -15,6 +15,7 @@ export default function DataStatus() {
   const validAssets = getValidAssets();
   const mapped = getMappedAssets();
   const unmapped = getUnmappedAssets();
+  const hierarchy = getHierarchyCompleteness();
 
   const rows = [
     ['Facilities Configured', getFacilities().length],
@@ -22,6 +23,9 @@ export default function DataStatus() {
     ['Floors Configured', getFloors().length],
     ['Sections Configured', getSections().length],
     ['Rooms Configured', getRooms().length],
+    ['Rooms with Verified Parents', hierarchy.roomsWithValidParents],
+    ['Rooms Pending Section Configuration', hierarchy.roomsPendingSection],
+    ['Hierarchy Errors', hierarchy.hierarchyErrors],
     ['Assets Imported', validAssets.length],
     ['Mapped Assets', mapped.length],
     ['Unmapped Assets', unmapped.length],

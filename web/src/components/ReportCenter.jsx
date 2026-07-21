@@ -5,7 +5,7 @@ import {
   getSectionsForFloor, getOutstandingSections, getBuildingTotals, getCampusSummary,
   getProjectTotals, pct, getValidAssets, getAssetIssueCounts, getImportStatus,
   getMappingHistory, getSectionHistory, getQcRecords, getResearchRecords,
-  getRoomAssignmentHistory, getAssets, getImportHistory,
+  getAssets, getImportHistory,
 } from '../lib/data';
 import { getRoomZone } from '../lib/roomAssignment';
 import { exportReportToExcel } from '../lib/exportExcel';
@@ -31,13 +31,12 @@ const REPORTS = [
   { id: 'sectionHistory', label: 'Section History', filters: ['startDate', 'endDate'] },
   { id: 'qcRecords', label: 'QC Records', filters: ['building', 'startDate', 'endDate'] },
   { id: 'researchRecords', label: 'Research Records', filters: ['building', 'startDate', 'endDate'] },
-  { id: 'roomDirectory500', label: 'Building 500 Room Directory', filters: ['floor'] },
+  { id: 'roomDirectory500', label: 'Room Configuration', filters: ['building', 'floor'] },
   { id: 'roomsByFloor', label: 'Rooms by Floor', filters: ['building', 'floor'] },
   { id: 'roomsBySection', label: 'Rooms by Section', filters: ['building', 'floor', 'section'] },
-  { id: 'unassignedRooms', label: 'Unassigned Rooms', filters: ['building', 'floor'] },
-  { id: 'roomsNeedingReview', label: 'Rooms Needing Review', filters: ['building', 'floor'] },
-  { id: 'roomAssignmentHistory', label: 'Room Assignment History', filters: ['startDate', 'endDate'] },
-  { id: 'sectionRoomMatrix', label: 'Section-to-Room Matrix', filters: ['building', 'floor', 'section'] },
+  { id: 'unresolvedRoomConfig', label: 'Unresolved Room Configuration', filters: ['building', 'floor'] },
+  { id: 'roomProgress', label: 'Room Progress', filters: ['building', 'floor'] },
+  { id: 'sectionRoomMatrix', label: 'Section-to-Room Directory', filters: ['building', 'floor', 'section'] },
   { id: 'enexImportSummary', label: 'ENEX Import Summary', filters: [] },
   { id: 'unresolvedEnexLocations', label: 'Unresolved ENEX Locations', filters: [] },
   { id: 'openResearchItems', label: 'Open Research Items', filters: ['building'] },
@@ -399,19 +398,20 @@ function buildReport(reportId, filters) {
     }
 
     case 'roomDirectory500': {
-      let rows = getRooms().filter((r) => r.buildingId === '500');
+      let rows = getRooms();
+      if (filters.building) rows = rows.filter((r) => r.buildingId === filters.building);
       if (filters.floor) rows = rows.filter((r) => r.floorId === filters.floor);
       const mapped = rows.map((r) => ({
         floorId: r.floorId, zone: getRoomZone(r.roomNumber), roomNumber: r.roomNumber, roomName: r.roomName,
-        roomType: r.roomType || '', sectionId: r.sectionId || 'Unassigned', assignmentStatus: r.assignmentStatus,
-        confidence: r.assignmentConfidence, source: r.sourceDocument || '',
+        roomType: r.roomType || '', sectionId: r.sectionId || 'Section Pending', status: statusLabel(r.status),
+        lastUpdate: r.lastUpdate || 'Not Updated',
       }));
       const columns = [
         { header: 'Floor', key: 'floorId' }, { header: 'Zone', key: 'zone' }, { header: 'Room Number', key: 'roomNumber' },
         { header: 'Room Name', key: 'roomName' }, { header: 'Room Type', key: 'roomType' }, { header: 'Section', key: 'sectionId' },
-        { header: 'Assignment Status', key: 'assignmentStatus' }, { header: 'Confidence', key: 'confidence' }, { header: 'Source Document', key: 'source' },
+        { header: 'Status', key: 'status' }, { header: 'Last Updated', key: 'lastUpdate' },
       ];
-      return { columns, rows: mapped, summaryLines: [`Total Building 500 rooms: ${mapped.length}`], emptyMessage: 'No Building 500 rooms have been extracted or imported yet.' };
+      return { columns, rows: mapped, summaryLines: [`Total rooms: ${mapped.length}`], emptyMessage: 'No rooms have been configured yet.' };
     }
 
     case 'roomsByFloor': {
@@ -421,10 +421,10 @@ function buildReport(reportId, filters) {
       const mapped = rows
         .slice()
         .sort((a, b) => (a.floorId || '').localeCompare(b.floorId || ''))
-        .map((r) => ({ floorId: r.floorId, roomNumber: r.roomNumber, roomName: r.roomName, roomType: r.roomType || '', assignmentStatus: r.assignmentStatus, status: statusLabel(r.status) }));
+        .map((r) => ({ floorId: r.floorId, roomNumber: r.roomNumber, roomName: r.roomName, roomType: r.roomType || '', section: r.sectionId || 'Section Pending', status: statusLabel(r.status) }));
       const columns = [
         { header: 'Floor', key: 'floorId' }, { header: 'Room Number', key: 'roomNumber' }, { header: 'Room Name', key: 'roomName' },
-        { header: 'Room Type', key: 'roomType' }, { header: 'Assignment Status', key: 'assignmentStatus' }, { header: 'Operational Status', key: 'status' },
+        { header: 'Room Type', key: 'roomType' }, { header: 'Section', key: 'section' }, { header: 'Status', key: 'status' },
       ];
       return { columns, rows: mapped, summaryLines: [], emptyMessage: 'No rooms matched the selected filters.' };
     }
@@ -437,54 +437,73 @@ function buildReport(reportId, filters) {
       const mapped = rows
         .slice()
         .sort((a, b) => (a.sectionId || '').localeCompare(b.sectionId || ''))
-        .map((r) => ({ sectionId: r.sectionId, roomNumber: r.roomNumber, roomName: r.roomName, assignmentStatus: r.assignmentStatus, confidence: r.assignmentConfidence, status: statusLabel(r.status) }));
+        .map((r) => ({ sectionId: r.sectionId, roomNumber: r.roomNumber, roomName: r.roomName, status: statusLabel(r.status) }));
       const columns = [
         { header: 'Section', key: 'sectionId' }, { header: 'Room Number', key: 'roomNumber' }, { header: 'Room Name', key: 'roomName' },
-        { header: 'Assignment Status', key: 'assignmentStatus' }, { header: 'Confidence', key: 'confidence' }, { header: 'Operational Status', key: 'status' },
+        { header: 'Status', key: 'status' },
       ];
-      return { columns, rows: mapped, summaryLines: [], emptyMessage: 'No rooms are assigned to a section yet.' };
+      return { columns, rows: mapped, summaryLines: [], emptyMessage: 'No rooms have a verified section yet.' };
     }
 
-    case 'unassignedRooms': {
-      let rows = getRooms().filter((r) => r.assignmentStatus === 'unassigned');
+    case 'unresolvedRoomConfig': {
+      const buildingIds = new Set(buildings.map((b) => b.id));
+      const floorIds = new Set(floors.map((f) => f.id));
+      const sectionIds = new Set(sections.map((s) => s.id));
+      let rows = getRooms().filter((r) =>
+        !r.facilityId || !r.buildingId || !r.floorId || !r.roomNumber ||
+        !r.sectionId ||
+        (r.buildingId && !buildingIds.has(r.buildingId)) ||
+        (r.floorId && !floorIds.has(r.floorId)) ||
+        (r.sectionId && !sectionIds.has(r.sectionId))
+      );
       if (filters.building) rows = rows.filter((r) => r.buildingId === filters.building);
       if (filters.floor) rows = rows.filter((r) => r.floorId === filters.floor);
-      const mapped = rows.map((r) => ({ floorId: r.floorId, zone: getRoomZone(r.roomNumber), roomNumber: r.roomNumber, roomName: r.roomName, roomType: r.roomType || '', reason: r.assignmentReason || '' }));
-      const columns = [
-        { header: 'Floor', key: 'floorId' }, { header: 'Zone', key: 'zone' }, { header: 'Room Number', key: 'roomNumber' },
-        { header: 'Room Name', key: 'roomName' }, { header: 'Room Type', key: 'roomType' }, { header: 'Reason', key: 'reason' },
-      ];
-      return { columns, rows: mapped, summaryLines: [`Unassigned rooms: ${mapped.length}`], emptyMessage: 'No unassigned rooms — every room has a section.' };
-    }
-
-    case 'roomsNeedingReview': {
-      let rows = getRooms().filter((r) => r.assignmentStatus === 'needs_review' || r.assignmentStatus === 'suggested');
-      if (filters.building) rows = rows.filter((r) => r.buildingId === filters.building);
-      if (filters.floor) rows = rows.filter((r) => r.floorId === filters.floor);
-      const mapped = rows.map((r) => ({ floorId: r.floorId, zone: getRoomZone(r.roomNumber), roomNumber: r.roomNumber, roomName: r.roomName, suggestedSection: r.sectionId || '', confidence: r.assignmentConfidence, reason: r.assignmentReason || '' }));
-      const columns = [
-        { header: 'Floor', key: 'floorId' }, { header: 'Zone', key: 'zone' }, { header: 'Room Number', key: 'roomNumber' },
-        { header: 'Room Name', key: 'roomName' }, { header: 'Suggested Section', key: 'suggestedSection' },
-        { header: 'Confidence', key: 'confidence' }, { header: 'Reason', key: 'reason' },
-      ];
-      return { columns, rows: mapped, summaryLines: [`Rooms needing review: ${mapped.length}`], emptyMessage: 'No rooms are currently flagged for review.' };
-    }
-
-    case 'roomAssignmentHistory': {
-      let history = getRoomAssignmentHistory();
-      if (filters.startDate) history = history.filter((h) => h.updatedAt >= filters.startDate);
-      if (filters.endDate) history = history.filter((h) => h.updatedAt <= filters.endDate + 'T23:59:59');
-      const mapped = history.map((h) => ({
-        date: new Date(h.updatedAt).toLocaleString(), roomId: h.roomId,
-        previousSection: h.previousSectionId || 'None', newSection: h.newSectionId || 'None',
-        previousStatus: h.previousStatus, newStatus: h.newStatus, confidence: h.confidence || '', source: h.source,
+      const issueFor = (r) => {
+        if (!r.facilityId) return 'Missing facility';
+        if (!r.buildingId) return 'Missing building';
+        if (r.buildingId && !buildingIds.has(r.buildingId)) return 'Invalid building reference';
+        if (!r.floorId) return 'Missing floor';
+        if (r.floorId && !floorIds.has(r.floorId)) return 'Invalid floor reference';
+        if (!r.roomNumber) return 'Missing room number';
+        if (r.sectionId && !sectionIds.has(r.sectionId)) return 'Invalid section reference';
+        if (!r.sectionId) return 'Section pending';
+        return 'Unresolved';
+      };
+      const mapped = rows.map((r) => ({
+        roomId: r.id, roomNumber: r.roomNumber || '(none)', roomName: r.roomName || '',
+        facility: r.facilityId || '(missing)', building: r.buildingId || '(missing)',
+        floor: r.floorId || '(missing)', section: r.sectionId || '(none)',
+        issue: issueFor(r), source: r.sourceDocument || '', notes: r.notes || '',
       }));
       const columns = [
-        { header: 'Date', key: 'date' }, { header: 'Room', key: 'roomId' }, { header: 'Previous Section', key: 'previousSection' },
-        { header: 'New Section', key: 'newSection' }, { header: 'Previous Status', key: 'previousStatus' },
-        { header: 'New Status', key: 'newStatus' }, { header: 'Confidence', key: 'confidence' }, { header: 'Source', key: 'source' },
+        { header: 'Room ID', key: 'roomId' }, { header: 'Room Number', key: 'roomNumber' }, { header: 'Room Name', key: 'roomName' },
+        { header: 'Facility', key: 'facility' }, { header: 'Building', key: 'building' }, { header: 'Floor', key: 'floor' },
+        { header: 'Section', key: 'section' }, { header: 'Issue', key: 'issue' }, { header: 'Source', key: 'source' }, { header: 'Notes', key: 'notes' },
       ];
-      return { columns, rows: mapped, summaryLines: [], emptyMessage: 'No room assignment changes recorded yet.' };
+      return { columns, rows: mapped, summaryLines: [`Rooms pending configuration: ${mapped.length}`], emptyMessage: 'No unresolved room configuration — every room has a valid facility, building, floor, and section.' };
+    }
+
+    case 'roomProgress': {
+      let rows = getRooms();
+      if (filters.building) rows = rows.filter((r) => r.buildingId === filters.building);
+      if (filters.floor) rows = rows.filter((r) => r.floorId === filters.floor);
+      const bySection = new Map();
+      rows.filter((r) => r.sectionId).forEach((r) => {
+        if (!bySection.has(r.sectionId)) bySection.set(r.sectionId, []);
+        bySection.get(r.sectionId).push(r);
+      });
+      const mapped = Array.from(bySection.entries()).map(([sectionId, secRooms]) => {
+        const completedCount = secRooms.filter((r) => r.status === 'completed').length;
+        return {
+          sectionId, roomCount: secRooms.length, completedRooms: completedCount,
+          roomProgress: secRooms.length > 0 ? `${Math.round((completedCount / secRooms.length) * 100)}%` : 'Rooms Pending',
+        };
+      });
+      const columns = [
+        { header: 'Section', key: 'sectionId' }, { header: 'Room Count', key: 'roomCount' },
+        { header: 'Completed Rooms', key: 'completedRooms' }, { header: 'Room Progress', key: 'roomProgress' },
+      ];
+      return { columns, rows: mapped, summaryLines: [], emptyMessage: 'No sections have configured rooms yet.' };
     }
 
     case 'sectionRoomMatrix': {
@@ -494,15 +513,14 @@ function buildReport(reportId, filters) {
       if (filters.section) rows = rows.filter((r) => r.sectionId === filters.section);
       const mapped = rows.map((r) => ({
         facilityId: r.facilityId, buildingId: r.buildingId, floorId: r.floorId, sectionId: r.sectionId,
-        roomNumber: r.roomNumber, roomName: r.roomName, assignmentStatus: r.assignmentStatus,
-        confidence: r.assignmentConfidence, source: r.assignmentSource,
+        roomNumber: r.roomNumber, roomName: r.roomName, status: statusLabel(r.status),
       }));
       const columns = [
         { header: 'Facility', key: 'facilityId' }, { header: 'Building', key: 'buildingId' }, { header: 'Floor', key: 'floorId' },
         { header: 'Section', key: 'sectionId' }, { header: 'Room Number', key: 'roomNumber' }, { header: 'Room Name', key: 'roomName' },
-        { header: 'Assignment Status', key: 'assignmentStatus' }, { header: 'Confidence', key: 'confidence' }, { header: 'Assignment Source', key: 'source' },
+        { header: 'Status', key: 'status' },
       ];
-      return { columns, rows: mapped, summaryLines: [], emptyMessage: 'No rooms are assigned to a section yet.' };
+      return { columns, rows: mapped, summaryLines: [], emptyMessage: 'No rooms have a verified section yet.' };
     }
 
     case 'enexImportSummary': {

@@ -408,6 +408,7 @@ export function getProjectTotals() {
 export function getBuildingTotals(buildingId) {
   const building = getBuilding(buildingId);
   const buildingSections = getSectionsForBuilding(buildingId);
+  const buildingRooms = getRooms().filter((r) => r.buildingId === buildingId);
   const mappedTagged = getAssetCountForBuilding(buildingId);
   return {
     expected: building?.expectedAssets ?? 0,
@@ -419,12 +420,16 @@ export function getBuildingTotals(buildingId) {
     sectionProgress: averageCompletion(buildingSections),
     sectionCount: buildingSections.length,
     floorCount: getFloorsForBuilding(buildingId).length,
+    roomCount: buildingRooms.length,
+    roomsCompleted: buildingRooms.filter((r) => r.status === 'completed').length,
+    roomsPendingSection: buildingRooms.filter((r) => !r.sectionId).length,
   };
 }
 
 export function getFloorTotals(floorId) {
   const floor = getFloors().find((f) => f.id === floorId);
   const floorSections = getSectionsForFloor(floorId);
+  const floorRooms = getRooms().filter((r) => r.floorId === floorId);
   const mappedTagged = getAssetCountForFloor(floorId);
   return {
     expected: floor?.expectedAssets ?? 0,
@@ -432,6 +437,9 @@ export function getFloorTotals(floorId) {
     tagged: mappedTagged > 0 ? mappedTagged : (floor?.taggedAssets ?? 0),
     sectionProgress: averageCompletion(floorSections),
     sectionCount: floorSections.length,
+    roomCount: floorRooms.length,
+    roomsCompleted: floorRooms.filter((r) => r.status === 'completed').length,
+    roomsPendingSection: floorRooms.filter((r) => !r.sectionId).length,
   };
 }
 
@@ -659,64 +667,88 @@ export function getRoomSourceMetadata() {
   return loadLocalData(LOCAL_KEYS.roomSourceMetadata, []);
 }
 
-// Applies a confirmed/rejected/needs-review/cleared status change to one or
-// more rooms (by room id). Every change is logged to room assignment
-// history — history is never overwritten, only appended to. This is the
-// single choke point every UI action in RoomAssignmentReview goes through,
-// so a batch action always requires the same explicit human trigger as a
-// single one — nothing here runs on its own.
-export function applyRoomAssignmentChange(roomIds, patch, source = 'manual_review') {
-  const rooms = getRooms();
-  const historyEntries = [];
-
-  const updated = rooms.map((r) => {
-    if (!roomIds.includes(r.id)) return r;
-    const previousSectionId = r.sectionId || '';
-    const previousStatus = r.assignmentStatus || 'unassigned';
-    const next = { ...r, ...patch };
-
-    historyEntries.push({
-      id: `${r.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      roomId: r.id,
-      previousSectionId,
-      newSectionId: next.sectionId || '',
-      previousStatus,
-      newStatus: next.assignmentStatus || previousStatus,
-      confidence: next.assignmentConfidence || '',
-      reason: next.assignmentReason || '',
-      source,
-      updatedAt: new Date().toISOString(),
-    });
-
-    return next;
-  });
-
-  saveLocalData(LOCAL_KEYS.rooms, updated);
-  appendRoomAssignmentHistory(historyEntries);
-  return { updatedCount: historyEntries.length };
-}
+// V10: rooms are configured via approved import/configuration data only —
+// there is no manual "confirm this room's section" workflow anymore.
+// A room's section is either verified (sectionId is set, from an approved
+// source) or pending configuration (sectionId is blank). Progress and
+// counts below are computed directly from that, never from a retired
+// assignment-confidence field.
 
 export function getRoomCounts() {
   const rooms = getRooms();
+  const withSection = rooms.filter((r) => r.sectionId);
   return {
     roomsConfigured: rooms.length,
-    roomsAssigned: rooms.filter((r) => r.assignmentStatus === 'confirmed').length,
-    roomsUnassigned: rooms.filter((r) => r.assignmentStatus === 'unassigned').length,
-    roomsNeedingReview: rooms.filter((r) => r.assignmentStatus === 'needs_review' || r.assignmentStatus === 'suggested').length,
+    roomsWithVerifiedSection: withSection.length,
+    roomsPendingSection: rooms.length - withSection.length,
     roomsCompleted: rooms.filter((r) => r.status === 'completed').length,
+    roomsInProgress: rooms.filter((r) => r.status === 'in_progress').length,
+    roomsPending: rooms.filter((r) => r.status === 'not_started' || r.status === 'pending').length,
     roomsReturnNeeded: rooms.filter((r) => r.status === 'return_needed').length,
     roomsNoAccess: rooms.filter((r) => r.status === 'no_access').length,
   };
 }
 
 // Room-derived section progress. Only returned when the section actually
-// has confirmed-assigned rooms — otherwise the caller should display
-// "Pending" rather than a 0% that implies real data.
+// has rooms with a verified section reference — otherwise the caller
+// should display "Rooms Pending" rather than a 0% that implies real data.
 export function getRoomCompletionForSection(sectionId) {
-  const assigned = getRooms().filter((r) => r.sectionId === sectionId && r.assignmentStatus === 'confirmed');
-  if (assigned.length === 0) return null;
-  const completed = assigned.filter((r) => r.status === 'completed').length;
-  return Math.round((completed / assigned.length) * 100);
+  const configured = getRooms().filter((r) => r.sectionId === sectionId);
+  if (configured.length === 0) return null;
+  const completed = configured.filter((r) => r.status === 'completed').length;
+  return Math.round((completed / configured.length) * 100);
+}
+
+export function getSectionRoomCounts(sectionId) {
+  const rooms = getRooms().filter((r) => r.sectionId === sectionId);
+  return {
+    roomCount: rooms.length,
+    completedRooms: rooms.filter((r) => r.status === 'completed').length,
+    roomProgress: rooms.length > 0 ? Math.round((rooms.filter((r) => r.status === 'completed').length / rooms.length) * 100) : null,
+  };
+}
+
+// Hierarchy-completeness summary for Data Status / a configuration
+// dashboard: how much of the Facility -> Building -> Floor -> Section ->
+// Room chain is actually populated, and how many rooms still reference a
+// missing parent (a real data-integrity error, not just "pending").
+export function getHierarchyCompleteness() {
+  const facilities = getFacilities();
+  const buildings = getBuildings();
+  const floors = getFloors();
+  const sections = getSections();
+  const rooms = getRooms();
+
+  const facilityIds = new Set(facilities.map((f) => f.id));
+  const buildingIds = new Set(buildings.map((b) => b.id));
+  const floorIds = new Set(floors.map((f) => f.id));
+  const sectionIds = new Set(sections.map((s) => s.id));
+
+  let validFacility = 0, validBuilding = 0, validFloor = 0, validSection = 0, pendingSection = 0, hierarchyErrors = 0;
+  rooms.forEach((r) => {
+    let hasError = false;
+    if (r.facilityId && facilityIds.has(r.facilityId)) validFacility += 1;
+    else hasError = true;
+    if (r.buildingId && buildingIds.has(r.buildingId)) validBuilding += 1;
+    else hasError = true;
+    if (r.floorId && floorIds.has(r.floorId)) validFloor += 1;
+    else hasError = true;
+    if (!r.sectionId) pendingSection += 1;
+    else if (sectionIds.has(r.sectionId)) validSection += 1;
+    else hasError = true;
+    if (hasError) hierarchyErrors += 1;
+  });
+
+  return {
+    facilitiesConfigured: facilities.length,
+    buildingsConfigured: getConfiguredBuildings().length,
+    floorsConfigured: floors.length,
+    sectionsConfigured: sections.length,
+    roomsConfigured: rooms.length,
+    roomsWithValidParents: rooms.length - hierarchyErrors,
+    roomsPendingSection: pendingSection,
+    hierarchyErrors,
+  };
 }
 
 // ---- ENEX location aliases, parser rules, and review history ----

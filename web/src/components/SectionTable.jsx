@@ -1,5 +1,5 @@
 import { useState, Fragment } from 'react';
-import { getFloorName, fmtNum, getSectionHistoryForSection } from '../lib/data';
+import { getFloorName, fmtNum, getSectionHistoryForSection, getSectionRoomCounts } from '../lib/data';
 import { StatusBadge } from '../lib/status';
 import SectionHistory from './SectionHistory';
 
@@ -20,6 +20,9 @@ export default function SectionTable({ sections, title = 'Section Progress', emp
                 <th>Section</th>
                 <th>Section Progress</th>
                 <th>Asset Progress</th>
+                <th>Room Count</th>
+                <th>Completed Rooms</th>
+                <th>Room Progress</th>
                 <th>Status</th>
                 <th>Expected Assets</th>
                 <th>Found</th>
@@ -34,6 +37,7 @@ export default function SectionTable({ sections, title = 'Section Progress', emp
                 const assetProgress = s.expectedAssets > 0
                   ? Math.round((s.taggedAssets / s.expectedAssets) * 100)
                   : null;
+                const roomCounts = getSectionRoomCounts(s.id);
                 const historyCount = getSectionHistoryForSection(s.id).length;
                 const expanded = expandedId === s.id;
                 return (
@@ -48,6 +52,9 @@ export default function SectionTable({ sections, title = 'Section Progress', emp
                         </div>
                       </td>
                       <td>{assetProgress === null ? 'Pending' : `${assetProgress}%`}</td>
+                      <td>{roomCounts.roomCount}</td>
+                      <td>{roomCounts.completedRooms}</td>
+                      <td>{roomCounts.roomProgress === null ? 'Rooms Pending' : `${roomCounts.roomProgress}%`}</td>
                       <td><StatusBadge status={s.status} /></td>
                       <td>{fmtNum(s.expectedAssets)}</td>
                       <td>{fmtNum(s.foundAssets)}</td>
@@ -65,7 +72,7 @@ export default function SectionTable({ sections, title = 'Section Progress', emp
                     </tr>
                     {expanded && (
                       <tr>
-                        <td colSpan={11}>
+                        <td colSpan={14}>
                           <SectionHistory sectionId={s.id} />
                         </td>
                       </tr>

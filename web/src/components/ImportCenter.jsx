@@ -66,7 +66,7 @@ const IMPORT_TYPES = [
   {
     id: 'room-config', label: 'Room Configuration', group: 'Configuration Imports',
     accept: '.xlsx,.xls,.csv', kind: 'config', configEntity: 'rooms',
-    requiredHeaders: ['Facility ID', 'Building ID', 'Floor ID', 'Section ID', 'Room ID', 'Room Number', 'Room Name', 'Status', 'Last Updated', 'Notes'],
+    requiredHeaders: ['Facility ID', 'Building ID', 'Floor ID', 'Section ID', 'Room ID', 'Room Number', 'Room Name', 'Room Type', 'Architectural Zone', 'Status', 'Last Updated', 'Notes'],
   },
 ];
 
@@ -92,7 +92,7 @@ const CONFIG_HANDLERS = {
     key: LOCAL_KEYS.sectionProgress,
   },
   rooms: {
-    preview: (rows) => previewRoomRows(rows, getRooms(), getSections()),
+    preview: (rows) => previewRoomRows(rows, getRooms(), getSections(), getBuildings(), getFloors()),
     apply: (preview) => applyRoomImport(preview, getRooms()),
     key: LOCAL_KEYS.rooms,
   },

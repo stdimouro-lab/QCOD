@@ -510,48 +510,53 @@ export function previewSectionConfigRows(rows, existingSections = [], existingFl
   });
 }
 
-const VALID_ASSIGNMENT_STATUSES = new Set(['confirmed', 'suggested', 'unassigned', 'needs_review']);
-const VALID_ASSIGNMENT_CONFIDENCE = new Set(['high', 'medium', 'low', 'none']);
-const VALID_ASSIGNMENT_SOURCES = new Set(['department_map', 'architectural_plan', 'manual_review', 'approved_rule', 'unassigned']);
+// A room number may repeat across different buildings — duplicate detection
+// must key on facility+building+floor+normalized room number, never on the
+// room number alone.
+function roomDupeKey(facilityId, buildingId, floorId, roomNumber) {
+  return `${normKey(facilityId)}::${normKey(buildingId)}::${normKey(floorId)}::${normKey(roomNumber).replace(/\s+/g, '')}`;
+}
 
-export function previewRoomRows(rows, existingRooms = [], existingSections = []) {
+export function previewRoomRows(rows, existingRooms = [], existingSections = [], existingBuildings = [], existingFloors = []) {
   const seenIds = new Set();
-  const seenRoomNumbersByFloor = new Map(); // floorId -> Set(roomNumber)
-  existingRooms.forEach((r) => {
-    const set = seenRoomNumbersByFloor.get(r.floorId) || new Set();
-    set.add(normKey(r.roomNumber));
-    seenRoomNumbersByFloor.set(r.floorId, set);
-  });
+  const seenDupeKeys = new Map(); // roomDupeKey -> row index, for within-batch duplicate detection
+  const existingDupeKeys = new Set(existingRooms.map((r) => roomDupeKey(r.facilityId, r.buildingId, r.floorId, r.roomNumber)));
 
-  return rows.map((row) => {
+  return rows.map((row, index) => {
     const facilityId = getField(row, 'Facility ID');
     const buildingId = getField(row, 'Building ID');
     const floorId = getField(row, 'Floor ID');
-    const sectionId = getField(row, 'Section ID'); // may be blank — blank means unassigned
+    const sectionId = getField(row, 'Section ID'); // may be blank — blank means Section Pending, not an error
     const id = getField(row, 'Room ID');
     const roomNumber = getField(row, 'Room Number');
     const roomName = getField(row, 'Room Name');
     const roomType = getField(row, 'Room Type');
     const architecturalZone = getField(row, 'Architectural Zone');
-    const squareFeetRaw = getField(row, 'Square Feet');
-    const assignmentStatusRaw = getField(row, 'Assignment Status');
-    const assignmentConfidenceRaw = getField(row, 'Assignment Confidence');
-    const assignmentSourceRaw = getField(row, 'Assignment Source');
-    const assignmentReason = getField(row, 'Assignment Reason');
     const statusRaw = getField(row, 'Status');
     const lastUpdated = getField(row, 'Last Updated');
     const notes = getField(row, 'Notes');
+
+    const allBlank = Object.values(row).every((v) => (v ?? '').toString().trim() === '');
+    if (allBlank) {
+      return { matched: false, valid: false, action: 'skip', errors: [], warnings: [], blank: true, normalized: null, raw: row };
+    }
 
     const errors = [];
     const warnings = [];
     if (!facilityId) errors.push('Facility ID is required');
     if (!buildingId) errors.push('Building ID is required');
+    else if (!existingBuildings.some((b) => normKey(b.id) === normKey(buildingId))) {
+      errors.push(`Building ID "${buildingId}" does not exist`);
+    }
     if (!floorId) errors.push('Floor ID is required');
+    else if (!existingFloors.some((f) => normKey(f.id) === normKey(floorId) && normKey(f.buildingId) === normKey(buildingId))) {
+      errors.push(`Floor ID "${floorId}" does not exist for building "${buildingId}"`);
+    }
     if (!roomNumber) errors.push('Room Number is required');
 
-    let matchedSection = null;
+    let sectionPending = !sectionId;
     if (sectionId) {
-      matchedSection = existingSections.find((s) => normKey(s.id) === normKey(sectionId));
+      const matchedSection = existingSections.find((s) => normKey(s.id) === normKey(sectionId));
       if (!matchedSection) {
         errors.push(`Section ID "${sectionId}" does not exist`);
       } else if (normKey(matchedSection.floorId) !== normKey(floorId) || normKey(matchedSection.buildingId) !== normKey(buildingId)) {
@@ -564,28 +569,15 @@ export function previewRoomRows(rows, existingRooms = [], existingSections = [])
     if (id && seenIds.has(normKey(id))) errors.push('Duplicate Room ID within this import batch');
     if (id) seenIds.add(normKey(id));
 
-    if (roomNumber && floorId) {
-      const floorSet = seenRoomNumbersByFloor.get(floorId) || new Set();
-      if (floorSet.has(normKey(roomNumber))) {
-        warnings.push(`Room Number "${roomNumber}" already exists on floor "${floorId}" — verify this isn't a duplicate`);
+    if (roomNumber && buildingId && floorId) {
+      const key = roomDupeKey(facilityId, buildingId, floorId, roomNumber);
+      if (seenDupeKeys.has(key)) {
+        errors.push(`Duplicate room: "${roomNumber}" already appears earlier in this import for the same facility/building/floor`);
+      } else if (existingDupeKeys.has(key) && !existingRooms.some((r) => normKey(r.id) === normKey(id))) {
+        errors.push(`Duplicate room: "${roomNumber}" already exists for this facility/building/floor under a different Room ID`);
       }
-      floorSet.add(normKey(roomNumber));
-      seenRoomNumbersByFloor.set(floorId, floorSet);
+      seenDupeKeys.set(key, index);
     }
-
-    let squareFeet = null;
-    if (squareFeetRaw !== '') {
-      const num = Number(squareFeetRaw);
-      if (Number.isNaN(num)) warnings.push(`Square Feet "${squareFeetRaw}" is not numeric — left blank`);
-      else squareFeet = num;
-    }
-
-    const assignmentStatus = VALID_ASSIGNMENT_STATUSES.has(normKey(assignmentStatusRaw)) ? normKey(assignmentStatusRaw) : null;
-    if (assignmentStatusRaw && !assignmentStatus) warnings.push(`Unrecognized Assignment Status "${assignmentStatusRaw}"`);
-    const assignmentConfidence = VALID_ASSIGNMENT_CONFIDENCE.has(normKey(assignmentConfidenceRaw)) ? normKey(assignmentConfidenceRaw) : null;
-    if (assignmentConfidenceRaw && !assignmentConfidence) warnings.push(`Unrecognized Assignment Confidence "${assignmentConfidenceRaw}"`);
-    const assignmentSource = VALID_ASSIGNMENT_SOURCES.has(normKey(assignmentSourceRaw)) ? normKey(assignmentSourceRaw) : null;
-    if (assignmentSourceRaw && !assignmentSource) warnings.push(`Unrecognized Assignment Source "${assignmentSourceRaw}"`);
 
     const existing = existingRooms.find((r) => normKey(r.id) === normKey(id));
     const { status, warning } = friendlyStatusOrDefault(statusRaw);
@@ -599,11 +591,7 @@ export function previewRoomRows(rows, existingRooms = [], existingSections = [])
       roomNumber, roomName: roomName || existing?.roomName || '',
       roomType: roomType || existing?.roomType || '',
       architecturalZone: architecturalZone || existing?.architecturalZone || '',
-      squareFeet: squareFeet !== null ? squareFeet : (existing?.squareFeet ?? null),
-      assignmentStatus: assignmentStatus || existing?.assignmentStatus || (sectionId ? 'suggested' : 'unassigned'),
-      assignmentConfidence: assignmentConfidence || existing?.assignmentConfidence || 'none',
-      assignmentSource: assignmentSource || existing?.assignmentSource || (sectionId ? 'manual_review' : 'unassigned'),
-      assignmentReason: assignmentReason || existing?.assignmentReason || '',
+      squareFeet: existing?.squareFeet ?? null,
       sourceDocument: existing?.sourceDocument || '',
       sourcePage: existing?.sourcePage ?? 1,
       extractedLabel: existing?.extractedLabel || '',
@@ -612,8 +600,36 @@ export function previewRoomRows(rows, existingRooms = [], existingSections = [])
       notes: notes || existing?.notes || '',
     } : null;
 
-    return { matched: !!existing, valid, action, errors, warnings, normalized, raw: row };
+    return { matched: !!existing, valid, action, errors, warnings, sectionPending, blank: false, normalized, raw: row };
   });
+}
+
+// Summarizes a room-import preview into the counts required before a user
+// is allowed to apply it: total/valid/blank/duplicate/conflicting/
+// missing-parent/missing-section/rejected/warning/new/updated/unchanged.
+export function summarizeRoomImportPreview(preview) {
+  const blank = preview.filter((p) => p.blank).length;
+  const rejected = preview.filter((p) => !p.blank && !p.valid).length;
+  const duplicates = preview.filter((p) => !p.blank && p.errors.some((e) => e.startsWith('Duplicate room:'))).length;
+  const missingParent = preview.filter((p) => !p.blank && p.errors.some((e) => /does not exist|is required/.test(e))).length;
+  const missingSection = preview.filter((p) => p.sectionPending).length;
+  const warningRows = preview.filter((p) => p.warnings.length > 0).length;
+  const created = preview.filter((p) => p.valid && p.action === 'create').length;
+  const updated = preview.filter((p) => p.valid && p.action === 'update').length;
+  return {
+    totalRows: preview.length,
+    validRows: preview.filter((p) => p.valid).length,
+    blankRows: blank,
+    duplicateRows: duplicates,
+    conflictingRows: preview.filter((p) => !p.blank && p.errors.some((e) => e.includes('different floor/building'))).length,
+    missingParentRows: missingParent,
+    missingSectionRows: missingSection,
+    rejectedRows: rejected,
+    warningRows,
+    newRooms: created,
+    updatedRooms: updated,
+    unchangedRooms: 0, // computed by the caller once actual field-level diffing is available
+  };
 }
 
 // ---- Apply configuration imports ----

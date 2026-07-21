@@ -1,4 +1,4 @@
-import { pct, fmtNum, getSectionsForFloor } from '../lib/data';
+import { pct, fmtNum, getSectionsForFloor, getFloorTotals } from '../lib/data';
 import { ProgressBar, StatusBadge } from '../lib/status';
 import EmptyState from './EmptyState';
 
@@ -22,6 +22,8 @@ export default function FloorProgress({ floors, buildingConfigured = true }) {
             ? Math.round(floorSections.reduce((s, sec) => s + (sec.completionPct || 0), 0) / floorSections.length)
             : 0;
           const assetProgress = pct(floor.taggedAssets, floor.expectedAssets);
+          const roomTotals = getFloorTotals(floor.id);
+          const roomProgress = roomTotals.roomCount > 0 ? Math.round((roomTotals.roomsCompleted / roomTotals.roomCount) * 100) : null;
 
           return (
             <article key={floor.id} className="floor-card">
@@ -33,6 +35,9 @@ export default function FloorProgress({ floors, buildingConfigured = true }) {
               <ProgressBar value={assetProgress} label="Asset Progress" />
               <dl className="asset-dl">
                 <div><dt>Tracked Sections</dt><dd>{floorSections.length}</dd></div>
+                <div><dt>Rooms</dt><dd>{roomTotals.roomCount}</dd></div>
+                <div><dt>Completed Rooms</dt><dd>{roomTotals.roomsCompleted}</dd></div>
+                <div><dt>Room Progress</dt><dd>{roomProgress === null ? 'Rooms Pending' : `${roomProgress}%`}</dd></div>
                 <div><dt>Expected</dt><dd>{fmtNum(floor.expectedAssets)}</dd></div>
                 <div><dt>Tagged</dt><dd>{fmtNum(floor.taggedAssets)}</dd></div>
               </dl>

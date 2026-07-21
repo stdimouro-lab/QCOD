@@ -18,7 +18,10 @@ export default function BuildingCards({ buildings, onSelect }) {
               <dl className="asset-dl building-dl">
                 <div><dt>Floors</dt><dd>{b.configured ? totals.floorCount : 'Pending'}</dd></div>
                 <div><dt>Sections</dt><dd>{b.configured ? totals.sectionCount : 0}</dd></div>
+                <div><dt>Rooms</dt><dd>{b.configured ? totals.roomCount : 0}</dd></div>
+                <div><dt>Rooms Pending Section</dt><dd>{b.configured ? totals.roomsPendingSection : 0}</dd></div>
                 <div><dt>Section Progress</dt><dd>{b.configured ? `${totals.sectionProgress}%` : '0%'}</dd></div>
+                <div><dt>Room Progress</dt><dd>{b.configured && totals.roomCount > 0 ? `${Math.round((totals.roomsCompleted / totals.roomCount) * 100)}%` : 'Rooms Pending'}</dd></div>
                 <div><dt>Asset Progress</dt><dd>{assetProgress === null ? 'Pending' : `${assetProgress}%`}</dd></div>
                 <div><dt>Expected</dt><dd>{fmtNum(totals.expected)}</dd></div>
                 <div><dt>Found</dt><dd>{fmtNum(totals.found)}</dd></div>

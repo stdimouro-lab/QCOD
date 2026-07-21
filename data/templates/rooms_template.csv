@@ -1,2 +1,2 @@
-Facility ID,Building ID,Floor ID,Section ID,Room ID,Room Number,Room Name,Room Type,Architectural Zone,Square Feet,Assignment Status,Assignment Confidence,Assignment Source,Assignment Reason,Status,Last Updated,Notes
-martinsburg-va,999,999-1,,999-1-101,101,Example Room,,,,,,,,Not Started,,
+Facility ID,Building ID,Floor ID,Section ID,Room ID,Room Number,Room Name,Room Type,Architectural Zone,Status,Last Updated,Notes
+martinsburg-va,999,999-1,,999-1-101,101,Example Room,,,Not Started,,

@@ -6,11 +6,11 @@ import { exportReportToExcel } from '../lib/exportExcel';
 import { exportReportToPdf } from '../lib/exportPdf';
 
 const ROOM_REPORT_COLUMNS = [
+  { header: 'Facility', key: 'facilityName' }, { header: 'Building', key: 'buildingName' },
   { header: 'Floor', key: 'floorId' }, { header: 'Zone', key: 'zone' },
-  { header: 'Room Number', key: 'roomNumber' }, { header: 'Room Name', key: 'roomName' },
-  { header: 'Room Type', key: 'roomType' }, { header: 'Section', key: 'sectionName' },
-  { header: 'Assignment Status', key: 'assignmentStatus' }, { header: 'Confidence', key: 'assignmentConfidence' },
-  { header: 'Operational Status', key: 'status' }, { header: 'Last Updated', key: 'lastUpdate' }, { header: 'Notes', key: 'notes' },
+  { header: 'Section', key: 'sectionName' }, { header: 'Room Number', key: 'roomNumber' },
+  { header: 'Room Name', key: 'roomName' }, { header: 'Room Type', key: 'roomType' },
+  { header: 'Status', key: 'status' }, { header: 'Last Updated', key: 'lastUpdate' }, { header: 'Notes', key: 'notes' },
 ];
 
 export default function RoomTable({ facilityId }) {
@@ -18,7 +18,6 @@ export default function RoomTable({ facilityId }) {
   const [floorFilter, setFloorFilter] = useState('');
   const [sectionFilter, setSectionFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [assignmentFilter, setAssignmentFilter] = useState(''); // '', 'assigned', 'unassigned', 'needs_review'
   const [search, setSearch] = useState('');
 
   const facilities = getFacilities();
@@ -26,14 +25,12 @@ export default function RoomTable({ facilityId }) {
   const floors = getFloors().filter((f) => !buildingFilter || f.buildingId === buildingFilter);
   const sections = floorFilter ? getSectionsForFloor(floorFilter) : [];
 
-  let rooms = getRooms().filter((r) => !facilityId || r.facilityId === facilityId);
+  const allRooms = getRooms().filter((r) => !facilityId || r.facilityId === facilityId);
+  let rooms = allRooms;
   if (buildingFilter) rooms = rooms.filter((r) => r.buildingId === buildingFilter);
   if (floorFilter) rooms = rooms.filter((r) => r.floorId === floorFilter);
   if (sectionFilter) rooms = rooms.filter((r) => r.sectionId === sectionFilter);
   if (statusFilter) rooms = rooms.filter((r) => r.status === statusFilter);
-  if (assignmentFilter === 'assigned') rooms = rooms.filter((r) => r.assignmentStatus === 'confirmed');
-  else if (assignmentFilter === 'unassigned') rooms = rooms.filter((r) => r.assignmentStatus === 'unassigned');
-  else if (assignmentFilter === 'needs_review') rooms = rooms.filter((r) => r.assignmentStatus === 'needs_review' || r.assignmentStatus === 'suggested');
   if (search.trim()) {
     const q = search.trim().toLowerCase();
     rooms = rooms.filter((r) => r.roomNumber?.toLowerCase().includes(q) || r.roomName?.toLowerCase().includes(q));
@@ -42,11 +39,27 @@ export default function RoomTable({ facilityId }) {
   const facilityName = (id) => facilities.find((f) => f.id === id)?.name ?? id;
   const buildingName = (id) => buildings.find((b) => b.id === id)?.name ?? id;
   const floorName = (id) => getFloors().find((f) => f.id === id)?.name ?? id;
-  const sectionName = (room) => getSectionsForFloor(room.floorId).find((s) => s.id === room.sectionId)?.name ?? room.sectionId;
+  const sectionName = (room) => getSectionsForFloor(room.floorId).find((s) => s.id === room.sectionId)?.name;
+
+  // Summary — computed over the currently filtered set, per spec.
+  const withSection = rooms.filter((r) => r.sectionId).length;
+  const pendingSection = rooms.length - withSection;
+  const completed = rooms.filter((r) => r.status === 'completed').length;
+  const inProgress = rooms.filter((r) => r.status === 'in_progress').length;
+  const pendingStatus = rooms.filter((r) => r.status === 'not_started' || r.status === 'pending').length;
 
   return (
     <section className="panel">
       <h2>Rooms</h2>
+
+      <dl className="asset-dl">
+        <div><dt>Total Rooms</dt><dd>{rooms.length}</dd></div>
+        <div><dt>Rooms with Verified Section</dt><dd>{withSection}</dd></div>
+        <div><dt>Rooms Pending Section Configuration</dt><dd>{pendingSection}</dd></div>
+        <div><dt>Completed Rooms</dt><dd>{completed}</dd></div>
+        <div><dt>Rooms In Progress</dt><dd>{inProgress}</dd></div>
+        <div><dt>Rooms Pending</dt><dd>{pendingStatus}</dd></div>
+      </dl>
 
       <div className="import-controls">
         <label>
@@ -82,16 +95,6 @@ export default function RoomTable({ facilityId }) {
         </label>
 
         <label>
-          Assignment
-          <select value={assignmentFilter} onChange={(e) => setAssignmentFilter(e.target.value)}>
-            <option value="">All</option>
-            <option value="assigned">Assigned</option>
-            <option value="unassigned">Unassigned</option>
-            <option value="needs_review">Needs Review</option>
-          </select>
-        </label>
-
-        <label>
           Search
           <input type="text" placeholder="Room number or name" value={search} onChange={(e) => setSearch(e.target.value)} />
         </label>
@@ -105,7 +108,10 @@ export default function RoomTable({ facilityId }) {
           onClick={() => exportReportToExcel({
             reportName: 'Room Directory',
             columns: ROOM_REPORT_COLUMNS,
-            rows: rooms.map((r) => ({ ...r, zone: getRoomZone(r.roomNumber), sectionName: sectionName(r) })),
+            rows: rooms.map((r) => ({
+              ...r, zone: getRoomZone(r.roomNumber), sectionName: sectionName(r) || 'Section Pending',
+              facilityName: facilityName(r.facilityId), buildingName: buildingName(r.buildingId),
+            })),
           })}
         >
           Export Excel
@@ -115,7 +121,10 @@ export default function RoomTable({ facilityId }) {
           onClick={() => exportReportToPdf({
             reportName: 'Room Directory',
             columns: ROOM_REPORT_COLUMNS,
-            rows: rooms.map((r) => ({ ...r, zone: getRoomZone(r.roomNumber), sectionName: sectionName(r) })),
+            rows: rooms.map((r) => ({
+              ...r, zone: getRoomZone(r.roomNumber), sectionName: sectionName(r) || 'Section Pending',
+              facilityName: facilityName(r.facilityId), buildingName: buildingName(r.buildingId),
+            })),
             emptyMessage: 'No room data has been configured for this selection.',
           })}
         >
@@ -130,9 +139,9 @@ export default function RoomTable({ facilityId }) {
           <table>
             <thead>
               <tr>
-                <th>Facility</th><th>Building</th><th>Floor</th><th>Zone</th><th>Section</th>
-                <th>Room Number</th><th>Room Name</th><th>Room Type</th><th>Assignment Status</th>
-                <th>Confidence</th><th>Operational Status</th><th>Last Updated</th><th>Notes</th>
+                <th>Facility</th><th>Building</th><th>Floor</th><th>Section</th>
+                <th>Room Number</th><th>Room Name</th><th>Room Type</th>
+                <th>Status</th><th>Last Updated</th><th>Notes</th>
               </tr>
             </thead>
             <tbody>
@@ -141,13 +150,10 @@ export default function RoomTable({ facilityId }) {
                   <td>{facilityName(r.facilityId)}</td>
                   <td>{buildingName(r.buildingId)}</td>
                   <td>{floorName(r.floorId)}</td>
-                  <td>{getRoomZone(r.roomNumber) || '—'}</td>
-                  <td>{sectionName(r)}</td>
+                  <td>{sectionName(r) || <span className="empty-note">Section Pending</span>}</td>
                   <td>{r.roomNumber}</td>
                   <td>{r.roomName || '—'}</td>
                   <td>{r.roomType || '—'}</td>
-                  <td>{r.assignmentStatus || 'unassigned'}</td>
-                  <td>{r.assignmentConfidence || 'none'}</td>
                   <td><StatusBadge status={r.status} /></td>
                   <td>{r.lastUpdate || 'Not Updated'}</td>
                   <td>{r.notes || '—'}</td>
