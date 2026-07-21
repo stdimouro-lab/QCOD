@@ -2,6 +2,55 @@ import { describe, it, expect } from 'vitest';
 import { extractRoomCandidatesFromText, dedupeAcrossPages } from '../../../../scripts/lib/roomExtractionParser.js';
 import { reviewRoomCandidates } from '../../../../scripts/lib/roomCandidateReview.js';
 
+describe('extractRoomCandidatesFromText() — real multi-line drawing layout', () => {
+  // The real architectural PDFs put the room number, name, and square
+  // footage each on their own line (never all on one line) — these tests
+  // are regression coverage added after finding this out from the actual
+  // Building 500 drawings.
+  it('extracts a name that spans multiple lines before the SQ. FT. line', () => {
+    const { candidates } = extractRoomCandidatesFromText(
+      '1B-114\nSHENANDOAH ROOM\nSTORAGE &\nRECREATION AREA\n1,575 SQ. FT.\n1A-139\nRECEPTION\n379 SQ. FT.',
+      '500-1', 'test.pdf'
+    );
+    const room = candidates.find((c) => c.roomNumber === '1B-114');
+    expect(room.roomName).toBe('SHENANDOAH ROOM STORAGE & RECREATION AREA');
+    expect(room.squareFeet).toBe(1575);
+  });
+
+  it('handles a room with no name printed on the drawing at all', () => {
+    const { candidates } = extractRoomCandidatesFromText('2A-100\n68 SQ. FT.\n2A-101\nMENS TOILET\n104 SQ. FT.', '500-2', 'test.pdf');
+    const room = candidates.find((c) => c.roomNumber === '2A-100');
+    expect(room.roomName).toBe('');
+    expect(room.squareFeet).toBe(68);
+  });
+
+  it('correctly separates a SQ. FT. value from a directly-adjacent next room number on the same physical line', () => {
+    // Real quirk: two text objects positioned at the same height in the
+    // drawing can end up on one "line" in extracted text, e.g.
+    // "45 SQ. FT. 3A-C2" where 3A-C2 is actually the START of the next label.
+    const { candidates } = extractRoomCandidatesFromText(
+      '3A-113\nHSKP\n45 SQ. FT. 3A-C2\nCORRIDOR\n1322 SQ. FT.',
+      '500-3', 'test.pdf'
+    );
+    const room = candidates.find((c) => c.roomNumber === '3A-113');
+    expect(room.roomName).toBe('HSKP');
+    expect(room.squareFeet).toBe(45);
+  });
+});
+
+describe('reviewRoomCandidates() — real-world false-positive guard', () => {
+  it('does not reject a legitimate room whose name-parsing picked up a tab-adjacent next room number', () => {
+    // Before the tab-normalization fix, this pattern caused the name to
+    // accidentally include "CORRIDOR" and get rejected as a corridor label.
+    const candidates = [
+      { roomNumber: '3A-113', roomName: 'HSKP', floorId: '500-3', extractedLabel: '3A-113' },
+    ];
+    const { clean, errors } = reviewRoomCandidates(candidates);
+    expect(clean).toHaveLength(1);
+    expect(errors).toHaveLength(0);
+  });
+});
+
 describe('extractRoomCandidatesFromText() — corridor/stair/elevator exclusion', () => {
   it('excludes corridor labels (e.g. 1A-C1)', () => {
     const { candidates } = extractRoomCandidatesFromText('1A-C1 CORRIDOR\n1A-136 PHARMACY', '500-1', 'test.pdf');

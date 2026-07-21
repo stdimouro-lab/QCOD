@@ -32,18 +32,44 @@ const REJECT_NAME_KEYWORDS = [
 ];
 
 function normalizeWhitespace(text) {
-  return text.replace(/\r\n/g, '\n').replace(/[ \t]+/g, ' ');
+  // Tabs in this PDF's extracted text mark a boundary between two adjacent
+  // text objects on the drawing (e.g. a room's SQ. FT. value immediately
+  // followed by the next room's number) — treat them as line breaks, not
+  // spaces, so the name-extraction step below can still find them.
+  return text.replace(/\r\n/g, '\n').replace(/\t/g, '\n').replace(/ +/g, ' ');
 }
 
-// Given the full page text and the character index of a matched room number,
-// take a short slice of text after it on the same line as a best-effort
-// room name. This is a heuristic — see the file-level note above.
-function guessRoomName(text, matchEndIndex) {
-  const restOfLine = text.slice(matchEndIndex).split('\n')[0];
-  const cleaned = restOfLine.replace(/^[\s:.\-–—]+/, '').trim();
-  // Cut at the next obvious field boundary (multiple spaces, a new number, etc.)
-  const cut = cleaned.split(/ {2,}|\t/)[0].trim();
-  return cut.slice(0, 80);
+// The real architectural PDF layout puts the room number, then the room
+// name (sometimes wrapped across 2-3 lines), then a "### SQ. FT." line, each
+// on its own line — never all on one line. This walks forward from the room
+// number, accumulating non-blank lines as the name until it hits a square-
+// footage line (which ends the name and supplies squareFeet) or what looks
+// like the start of the next room number (a safety net for the rare label
+// with no SQ. FT. line at all).
+const SQFT_LINE = /^([\d,]+)\s*SQ\.?\s*FT\.?/i;
+const ROOM_NUMBER_LINE_START = /^((?:G|[1-6])[A-E])-(\d{2,4})\b/;
+
+function extractNameAndArea(text, matchEndIndex) {
+  const lines = text.slice(matchEndIndex, matchEndIndex + 600).split(/[\n\t]/);
+  const nameParts = [];
+  let squareFeet = null;
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (line === '') continue;
+
+    const sfMatch = line.match(SQFT_LINE);
+    if (sfMatch) {
+      squareFeet = Number(sfMatch[1].replace(/,/g, ''));
+      break;
+    }
+    if (ROOM_NUMBER_LINE_START.test(line)) break; // next room's label started — no SF line for this one
+    if (nameParts.length >= 5) break; // safety cap against runaway accumulation
+
+    nameParts.push(line);
+  }
+
+  return { roomName: nameParts.join(' ').replace(/\s+/g, ' ').trim(), squareFeet };
 }
 
 /**
@@ -72,20 +98,17 @@ export function extractRoomCandidatesFromText(text, floorId, sourceDocument, sou
     }
     seenOnPage.add(roomNumber);
 
-    const roomName = guessRoomName(normalized, match.index + match[0].length);
+    const { roomName, squareFeet } = extractNameAndArea(normalized, match.index + match[0].length);
     const nameLooksRejectable = REJECT_NAME_KEYWORDS.some((re) => re.test(roomName));
     if (nameLooksRejectable) {
       rejected.push({ roomNumber, reason: 'rejected_label_keyword', extractedLabel: `${extractedLabel} ${roomName}` });
       continue;
     }
 
-    // Square footage sometimes appears right after the name as "### SF" or "### SQ FT"
-    const sfMatch = normalized.slice(match.index, match.index + 200).match(/(\d{2,5})\s*(?:SF|SQ\.?\s*FT)/i);
-
     candidates.push({
       roomNumber,
       roomName,
-      squareFeet: sfMatch ? Number(sfMatch[1]) : null,
+      squareFeet,
       architecturalZone: zone,
       floorId,
       sourceDocument,
