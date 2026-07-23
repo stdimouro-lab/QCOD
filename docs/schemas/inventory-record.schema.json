@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "QCOD Inventory Record (scanned/imported ENEX or AssetWorx asset)",
+  "type": "object",
+  "required": ["assetNumber"],
+  "properties": {
+    "assetNumber": { "type": "string", "pattern": "^613\\s?EE\\d+", "description": "Only 613 EE##### is valid; 613 E#### misreads are excluded before this record is ever created" },
+    "serialNumber": { "type": ["string", "null"] },
+    "description": { "type": ["string", "null"] },
+    "locationName": { "type": ["string", "null"] },
+    "rawLocation": { "type": ["string", "null"], "description": "Original unparsed ENEX location code, e.g. SPGD111-500" },
+    "cmr": { "type": ["string", "null"] },
+    "lastInventoried": { "type": ["string", "null"] },
+    "lastObservedTime": { "type": ["string", "null"] },
+    "disposalStatus": { "type": ["string", "null"] },
+    "facilityId": { "type": ["string", "null"] },
+    "buildingId": { "type": ["string", "null"] },
+    "floorId": { "type": ["string", "null"] },
+    "sectionId": { "type": ["string", "null"] },
+    "roomId": { "type": ["string", "null"] },
+    "issueTypes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["missing_serial_number", "missing_location", "invalid_location_format", "unmatched_room", "multiple_room_matches", "not_found_in_db", "new_asset_found", "offline_sync", "duplicate_asset_number", "duplicate_serial_number", "missing_description", "invalid_hierarchy"]
+      }
+    }
+  }
+}

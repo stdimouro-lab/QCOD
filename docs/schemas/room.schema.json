@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "QCOD Room",
+  "description": "Reference schema for the current QCOD room record, as implemented in web/src/lib/data.js and data/rooms.json. Migration reference only.",
+  "type": "object",
+  "required": ["id", "facilityId", "buildingId", "floorId", "roomNumber", "status"],
+  "properties": {
+    "id": { "type": "string", "description": "Deterministic: {buildingId}-{floorCode}-{normalizedRoomNumber}" },
+    "facilityId": { "type": "string" },
+    "buildingId": { "type": "string" },
+    "floorId": { "type": "string" },
+    "sectionId": { "type": ["string", "null"], "description": "Blank/null means Section Pending — a real, valid current state, not an error" },
+    "roomNumber": { "type": "string", "description": "Exact display value as printed on the architectural drawing; never normalized" },
+    "roomName": { "type": ["string", "null"] },
+    "roomType": { "type": ["string", "null"], "description": "Keyword-classified during extraction, not authoritative" },
+    "architecturalZone": { "type": ["string", "null"] },
+    "squareFeet": { "type": ["number", "null"] },
+    "sourceDocument": { "type": ["string", "null"] },
+    "sourcePage": { "type": ["integer", "null"] },
+    "extractedLabel": { "type": ["string", "null"] },
+    "status": { "type": "string", "enum": ["not_started", "in_progress", "completed", "return_needed", "no_access"] },
+    "lastUpdate": { "type": ["string", "null"] },
+    "notes": { "type": ["string", "null"] }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "QCOD Master Asset (VA official reference list record)",
+  "type": "object",
+  "required": ["assetNumber"],
+  "properties": {
+    "assetNumber": { "type": "string", "description": "Not guaranteed globally unique in source data" },
+    "description": { "type": ["string", "null"] },
+    "serialNumber": { "type": ["string", "null"] },
+    "manufacturer": { "type": ["string", "null"] },
+    "model": { "type": ["string", "null"] },
+    "buildingId": { "type": ["string", "null"] },
+    "roomId": { "type": ["string", "null"] },
+    "department": { "type": ["string", "null"] },
+    "status": { "type": ["string", "null"], "default": "active" }
+  }
+}

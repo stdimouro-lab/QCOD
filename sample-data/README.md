@@ -3,6 +3,22 @@
 This folder intentionally contains **no real VA data**. It exists to show
 Jon's team the file formats QCOD expects, using obviously synthetic values.
 
+## Ready-to-use fixture files (verified against real parsing logic)
+
+- `sample_room_configuration.csv` — 3 synthetic rooms, one with a verified
+  section and two pending, matching the real Room Configuration import format.
+- `sample_enex_import.csv` — 4 synthetic asset rows exercising: a clean
+  valid record, a missing-serial-number record, a `613 E` scanner misread
+  (confirmed via `classifyAssetNumber()` to be correctly excluded), and a
+  "Not Found in DB" record.
+- `sample_master_asset_list.csv` — 3 synthetic master records, one of
+  which is intentionally absent from `sample_enex_import.csv` so a "missing
+  from scan" comparison result can be demonstrated.
+
+Every value in these three files was checked directly against QCOD's real
+`classifyAssetNumber()` and `parseEnexLocation()` functions before being
+included here — they are not hand-guessed examples.
+
 ## Supported import formats
 
 ### AssetWorx / ENEX inventory export

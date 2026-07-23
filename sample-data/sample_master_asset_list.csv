@@ -1,0 +1,4 @@
+Asset Number,Description,Serial Number,Manufacturer,Model,Building,Room,Department
+613 EE00001,Sample Infusion Pump,SN-TEST-001,SampleCo,Model-X1,999,999-1-101,Sample Department
+613 EE00002,Sample Monitor,SN-TEST-002,SampleCo,Model-X2,999,999-1-102,Sample Department
+613 EE00099,Sample Item Not In Scan,SN-TEST-099,SampleCo,Model-X3,999,999-1-103,Sample Department

@@ -25,8 +25,8 @@ const REPORTS = [
   { id: 'floorConfig', label: 'Floor Configuration', filters: ['building', 'status'] },
   { id: 'sectionConfig', label: 'Section Configuration', filters: ['building', 'floor', 'status'] },
   { id: 'roomConfig', label: 'Room Configuration', filters: ['building', 'floor', 'section', 'status'] },
-  { id: 'assetMapping', label: 'Asset Mapping', filters: ['building'] },
-  { id: 'mappingHistory', label: 'Mapping History', filters: ['startDate', 'endDate'] },
+  { id: 'assetMapping', label: 'Assets with Building Reference', filters: ['building'] },
+  { id: 'mappingHistory', label: 'Location Reference History', filters: ['startDate', 'endDate'] },
   { id: 'sectionHistory', label: 'Section History', filters: ['startDate', 'endDate'] },
   { id: 'qcRecords', label: 'QC Records', filters: ['building', 'startDate', 'endDate'] },
   { id: 'researchRecords', label: 'Research Records', filters: ['building', 'startDate', 'endDate'] },
@@ -42,7 +42,7 @@ const REPORTS = [
   { id: 'pendingQc', label: 'Pending QC', filters: ['building'] },
   { id: 'duplicateAssets', label: 'Duplicate Assets', filters: [] },
   { id: 'missingSerialNumbers', label: 'Missing Serial Numbers', filters: [] },
-  { id: 'unmappedAssetsReport', label: 'Unmapped Assets', filters: [] },
+  { id: 'unmappedAssetsReport', label: 'Assets Missing Building Reference', filters: [] },
   { id: 'assetsByBuilding', label: 'Assets by Building', filters: ['building'] },
   { id: 'importHistoryReport', label: 'Import History', filters: ['startDate', 'endDate'] },
 ];
@@ -340,7 +340,7 @@ function buildReport(reportId, filters) {
         { header: 'Asset Number', key: 'assetNumber' }, { header: 'Building', key: 'buildingId' }, { header: 'Floor', key: 'floorId' },
         { header: 'Section', key: 'sectionId' }, { header: 'Room', key: 'roomId' }, { header: 'Location Name', key: 'locationName' },
       ];
-      return { columns, rows, summaryLines: [`Mapped assets: ${rows.length}`], emptyMessage: 'No assets have been mapped yet.' };
+      return { columns, rows, summaryLines: [`Assets with a building reference: ${rows.length}`], emptyMessage: 'No assets have a building reference yet.' };
     }
 
     case 'mappingHistory': {

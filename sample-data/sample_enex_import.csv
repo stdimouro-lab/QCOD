@@ -1,0 +1,5 @@
+Name,Serial Number,Description,ENEX Location,CMR,Last Inventoried,Last Observed Time,Disposal Status
+613 EE00001,SN-TEST-001,Sample Infusion Pump,SPGA136-999,CMR-TEST-01,2026-01-01,2026-01-01,Active
+613 EE00002,,Sample Monitor (missing serial),SPGD111-999,CMR-TEST-02,2026-01-01,2026-01-01,Active
+613 E00003,SN-TEST-003,Sample scanner misread — should be excluded,SPGA136-999,CMR-TEST-03,2026-01-01,2026-01-01,Active
+613 EE00004,SN-TEST-004,Sample item marked Not Found,SPGZ999-999,CMR-TEST-04,2026-01-01,2026-01-01,Not Found in DB

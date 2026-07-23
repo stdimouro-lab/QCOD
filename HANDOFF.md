@@ -6,6 +6,25 @@ Jon Flowers and his development team, for integration into their
 organization's application framework and eventual migration to a SQL
 data layer.
 
+## Recommended reading order
+
+1. This file (`HANDOFF.md`)
+2. `AI_MIGRATION_PROMPT.md` — copy this directly into your AI coding tool
+   before starting migration work
+3. `docs/BUSINESS_RULES.md` — the behavior that must survive migration
+4. `docs/DATA_SOURCE_INVENTORY.md` — every real dataset, storage key, and
+   known inconsistency
+5. `docs/FIELD_MAPPING_REFERENCE.md` — field-by-field detail for the
+   highest-priority datasets
+6. `docs/SQL_MIGRATION_GUIDE.md` — a starting-point schema, not a mandate
+7. `docs/IMPORT_WORKFLOWS.md` — every import type and its validation rules
+8. `docs/FEATURE_WORKFLOW_REFERENCE.md` — every page, mapped to its data and known gaps
+9. `docs/MIGRATION_ACCEPTANCE_CHECKLIST.md` — a checklist to verify against
+10. `docs/TEST_BEHAVIOR_MAP.md` — index from QCOD's 202 tests to the
+    behavior each one protects
+11. `ARCHITECTURE.md` — code-level structure
+12. `sample-data/README.md` — sanitized fixtures for testing your migration
+
 ## Project status
 
 **QCOD is a working, tested proof of concept — not a finished product.**
@@ -61,12 +80,25 @@ limitations."
   `localStorage` only.
 - **No true pagination/sorting/detail panel** in Master Asset List yet —
   it currently shows the first ~150 filtered rows.
-- **Single AssetWorx import profile** — the parser assumes one column
-  schema; a second schema (Station_Number/Sub_Station/Tag_Type/etc.) is
-  not yet auto-detected or separately profiled.
+- **Two AssetWorx import profiles already exist** ("AssetWorx Inventory,"
+  a simpler schema with no location resolution, and "AssetWorx ENEX
+  Import," which adds location parsing) — a correction to an earlier
+  version of this document, which incorrectly said only one profile
+  existed. Neither profile currently auto-detects which schema a given
+  file matches; the user picks the import type manually.
 - **No HTML-table `.xls` detection** — files are read as real Excel
   workbooks; a report that's actually an HTML table saved with an `.xls`
   extension will fail to parse.
+- **QC and Research records share one storage key across two different
+  field shapes** (manually-imported CSV rows vs. auto-generated records).
+  This round added shape-agnostic read helpers
+  (`web/src/lib/recordStatus.js`) so both display correctly, but the
+  underlying dual-shape storage itself was not unified — see
+  `docs/DATA_SOURCE_INVENTORY.md`. The SQL migration should pick one shape.
+- **Several backend features are built and tested but have no UI**: audit
+  log viewing, import undo, QC sampling configuration, and the
+  failed-QC-to-Research handoff. See `docs/FEATURE_WORKFLOW_REFERENCE.md`'s
+  "Not yet built" section for the complete list.
 
 ## How to run the app
 

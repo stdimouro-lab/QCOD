@@ -1,0 +1,4 @@
+Facility ID,Building ID,Floor ID,Section ID,Room ID,Room Number,Room Name,Room Type,Architectural Zone,Status,Last Updated,Notes
+sample-facility,999,999-1,,999-1-101,101,Sample Exam Room,Exam Room,1A,not_started,2026-01-01,Synthetic sample only
+sample-facility,999,999-1,,999-1-102,102,Sample Storage Room,Storage,1A,not_started,2026-01-01,Synthetic sample only
+sample-facility,999,999-1,999-1-CLINIC,999-1-103,103,Sample Clinic Office,Office,1B,in_progress,2026-01-02,Has a verified section
