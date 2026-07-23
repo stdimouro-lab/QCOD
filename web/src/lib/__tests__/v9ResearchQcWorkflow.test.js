@@ -4,7 +4,6 @@ import {
   sendFailedQcToResearch, qcFailureToResearchDraft,
 } from '../researchQcWorkflow.js';
 import { processEnexAssetRow, generateResearchRecords, generateQcRecords } from '../enexImport.js';
-import { validateRoomAssignment } from '../roomAssignment.js';
 import {
   LOCAL_KEYS, saveLocalData, clearLocalData,
   approveLocationAlias, reassignLocationAlias, getLocationAliases,
@@ -104,15 +103,26 @@ describe('Scanner misreads excluded from QC and Research', () => {
 
 // Test 20: batch room assignment hierarchy validation
 describe('Batch room assignment hierarchy validation', () => {
+  // The dedicated roomAssignment.js module was removed as unused dead code
+  // (see REMOVED_FILES.txt) once room configuration import took over all
+  // hierarchy validation directly. This test still verifies the underlying
+  // rule — a room can only be placed in a section on its own floor/building/
+  // facility — using the same check previewRoomRows() applies on import.
+  function sameHierarchy(room, section) {
+    return room.facilityId === section.facilityId &&
+      room.buildingId === section.buildingId &&
+      room.floorId === section.floorId;
+  }
+
   it('rejects a batch item whose room and target section are on different floors', () => {
     const rooms = [
       { id: 'r1', facilityId: 'x', buildingId: '500', floorId: '500-1' },
       { id: 'r2', facilityId: 'x', buildingId: '500', floorId: '500-2' },
     ];
     const targetSection = { facilityId: 'x', buildingId: '500', floorId: '500-1' };
-    const results = rooms.map((r) => validateRoomAssignment(r, targetSection));
-    expect(results[0].valid).toBe(true);  // same floor as target
-    expect(results[1].valid).toBe(false); // different floor — must be rejected even within a batch
+    const results = rooms.map((r) => sameHierarchy(r, targetSection));
+    expect(results[0]).toBe(true);  // same floor as target
+    expect(results[1]).toBe(false); // different floor — must be rejected even within a batch
   });
 });
 

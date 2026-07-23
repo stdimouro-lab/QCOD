@@ -64,3 +64,34 @@ Text correction: ResearchCenter.jsx's on-page description previously said
   current behavior: Research records are generated automatically from
   specific, explicit import conditions (never guessed), and scanner
   misreads are still excluded entirely.
+
+File: web/src/lib/roomAssignment.js and web/src/lib/__tests__/roomAssignment.test.js
+Reason removed: after replacing getRoomZone() calls in RoomTable.jsx and
+  ReportCenter.jsx with the stored, approved room.architecturalZone field
+  (populated directly from real architectural-PDF extraction rather than
+  re-derived at render time), this module had zero remaining callers
+  anywhere in live application code — confirmed by search before removal.
+  Its hierarchy-validation logic was never actually wired into the room
+  import pipeline in the first place; fileImport.js's previewRoomRows()
+  independently implements the same facility/building/floor/section checks.
+Replacement or retained behavior: room.architecturalZone is now read
+  directly from the room record. Hierarchy validation on import continues
+  to live in fileImport.js's previewRoomRows(), unaffected by this removal.
+  One test (batch room assignment hierarchy validation) that depended on
+  the removed validateRoomAssignment() was rewritten in place with an
+  equivalent inline check rather than deleted, so that coverage of the
+  underlying rule (a room can't be placed in a section on a different
+  floor/building/facility) was preserved.
+
+Bug fix (not a removal): QcCenter.jsx and ResearchCenter.jsx read QC/
+  Research status, date, facility, and building directly from CSV-import-
+  style field names (e.g. record['QC Status'], record['Date']). Once
+  generateQcRecords()/generateResearchRecords() began writing records with
+  camelCase fields (record.status, record.createdAt, record.facilityId)
+  into the SAME localStorage key, every automatically-generated record
+  displayed as blank in these tables and never matched the status/date
+  filters. Fixed via new shared helpers (web/src/lib/recordStatus.js,
+  web/src/lib/dateUtils.js) that check both field shapes. DataStatus.jsx's
+  Open QC/Open Research counts were also switched to the same shared rule
+  for consistency, though they were not previously broken (both counts
+  were already reading the correct field on the generated-record shape).

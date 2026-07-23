@@ -7,7 +7,6 @@ import {
   getMappingHistory, getSectionHistory, getQcRecords, getResearchRecords,
   getAssets, getImportHistory,
 } from '../lib/data';
-import { getRoomZone } from '../lib/roomAssignment';
 import { exportReportToExcel } from '../lib/exportExcel';
 import { exportReportToPdf } from '../lib/exportPdf';
 
@@ -402,7 +401,7 @@ function buildReport(reportId, filters) {
       if (filters.building) rows = rows.filter((r) => r.buildingId === filters.building);
       if (filters.floor) rows = rows.filter((r) => r.floorId === filters.floor);
       const mapped = rows.map((r) => ({
-        floorId: r.floorId, zone: getRoomZone(r.roomNumber), roomNumber: r.roomNumber, roomName: r.roomName,
+        floorId: r.floorId, zone: r.architecturalZone, roomNumber: r.roomNumber, roomName: r.roomName,
         roomType: r.roomType || '', sectionId: r.sectionId || 'Section Pending', status: statusLabel(r.status),
         lastUpdate: r.lastUpdate || 'Not Updated',
       }));

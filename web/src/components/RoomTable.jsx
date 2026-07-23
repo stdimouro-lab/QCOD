@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { getRooms, getFacilities, getBuildings, getFloors, getSectionsForFloor, statuses } from '../lib/data';
 import { StatusBadge } from '../lib/status';
-import { getRoomZone } from '../lib/roomAssignment';
 import { exportReportToExcel } from '../lib/exportExcel';
 import { exportReportToPdf } from '../lib/exportPdf';
 
@@ -109,7 +108,7 @@ export default function RoomTable({ facilityId }) {
             reportName: 'Room Directory',
             columns: ROOM_REPORT_COLUMNS,
             rows: rooms.map((r) => ({
-              ...r, zone: getRoomZone(r.roomNumber), sectionName: sectionName(r) || 'Section Pending',
+              ...r, zone: r.architecturalZone, sectionName: sectionName(r) || 'Section Pending',
               facilityName: facilityName(r.facilityId), buildingName: buildingName(r.buildingId),
             })),
           })}
@@ -122,7 +121,7 @@ export default function RoomTable({ facilityId }) {
             reportName: 'Room Directory',
             columns: ROOM_REPORT_COLUMNS,
             rows: rooms.map((r) => ({
-              ...r, zone: getRoomZone(r.roomNumber), sectionName: sectionName(r) || 'Section Pending',
+              ...r, zone: r.architecturalZone, sectionName: sectionName(r) || 'Section Pending',
               facilityName: facilityName(r.facilityId), buildingName: buildingName(r.buildingId),
             })),
             emptyMessage: 'No room data has been configured for this selection.',
@@ -140,7 +139,7 @@ export default function RoomTable({ facilityId }) {
             <thead>
               <tr>
                 <th>Facility</th><th>Building</th><th>Floor</th><th>Section</th>
-                <th>Room Number</th><th>Room Name</th><th>Room Type</th>
+                <th>Room Number</th><th>Room Name</th><th>Room Type</th><th>Zone</th>
                 <th>Status</th><th>Last Updated</th><th>Notes</th>
               </tr>
             </thead>
@@ -154,6 +153,7 @@ export default function RoomTable({ facilityId }) {
                   <td>{r.roomNumber}</td>
                   <td>{r.roomName || '—'}</td>
                   <td>{r.roomType || '—'}</td>
+                  <td>{r.architecturalZone || '—'}</td>
                   <td><StatusBadge status={r.status} /></td>
                   <td>{r.lastUpdate || 'Not Updated'}</td>
                   <td>{r.notes || '—'}</td>

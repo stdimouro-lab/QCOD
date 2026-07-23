@@ -1,0 +1,2 @@
+Facility ID,Building ID,Floor ID,Section ID,Room ID,Room Number,Room Name,Room Type,Architectural Zone,Status,Last Updated,Notes
+sample-facility,500,500-1,500-1-clinic,500-1-101,101,Sample Exam Room,Exam Room,Zone A,not_started,2026-07-21,Synthetic sample only — replace with approved room-directory information before importing

@@ -4,6 +4,7 @@ import {
   getSections, getRooms, getConfiguredBuildings, getHierarchyCompleteness,
   getOutstandingSections, getMasterAssetListImportStatus,
 } from '../lib/data';
+import { isOpenQcStatus, isOpenResearchStatus } from '../lib/recordStatus';
 
 function fmtTimestamp(value) {
   if (!value) return 'Not Imported';
@@ -18,8 +19,8 @@ export default function DataStatus() {
   const mapped = getMappedAssets();
   const unmapped = getUnmappedAssets();
   const hierarchy = getHierarchyCompleteness();
-  const openQc = getQcRecords().filter((r) => r.status !== 'closed').length;
-  const openResearch = getResearchRecords().filter((r) => r.status === 'open' || r.status === 'in_review' || r.status === 'reopened' || r.status === 'waiting_for_information').length;
+  const openQc = getQcRecords().filter(isOpenQcStatus).length;
+  const openResearch = getResearchRecords().filter(isOpenResearchStatus).length;
 
   const rows = [
     ['Facilities Configured', getFacilities().length],
